@@ -50,28 +50,28 @@
 					<target>1.8</target>
 				</configuration>
 			</plugin>
-			<plugin>
-				<artifactId>maven-dependency-plugin</artifactId>
-				<executions>
-					<execution>
-						<id>copy-dependencies</id>
-						<phase>package</phase>
-						<goals>
-							<goal>copy-dependencies</goal>
-						</goals>
-						<configuration>
-							<outputDirectory>${project.build.directory}/${lib.dir}</outputDirectory>
-							<overWriteReleases>true</overWriteReleases>
-							<overWriteSnapshots>true</overWriteSnapshots>
-							<!--                      <overWriteIfNewer>true</overWriteIfNewer> -->
-							<!--                      useBaseVersion=false makes the jar names match those -->
-							<!--                      that maven-jar-plugin puts in the manifest classpath  -->
-							<!--  Either append the artifact's baseVersion or uniqueVersion to the filename. Will only be used if isStripVersion() is false. -->
-							<useBaseVersion>true</useBaseVersion>
-						</configuration>
-					</execution>
-				</executions>
-			</plugin>
+<!-- 			<plugin> -->
+<!-- 				<artifactId>maven-dependency-plugin</artifactId> -->
+<!-- 				<executions> -->
+<!-- 					<execution> -->
+<!-- 						<id>copy-dependencies</id> -->
+<!-- 						<phase>package</phase> -->
+<!-- 						<goals> -->
+<!-- 							<goal>copy-dependencies</goal> -->
+<!-- 						</goals> -->
+<!-- 						<configuration> -->
+<!-- 							<outputDirectory>${project.build.directory}/${lib.dir}</outputDirectory> -->
+<!-- 							<overWriteReleases>true</overWriteReleases> -->
+<!-- 							<overWriteSnapshots>true</overWriteSnapshots> -->
+<!-- 							                     <overWriteIfNewer>true</overWriteIfNewer> -->
+<!-- 							                     useBaseVersion=false makes the jar names match those -->
+<!-- 							                     that maven-jar-plugin puts in the manifest classpath  -->
+<!-- 							 Either append the artifact's baseVersion or uniqueVersion to the filename. Will only be used if isStripVersion() is false. -->
+<!-- 							<useBaseVersion>true</useBaseVersion> -->
+<!-- 						</configuration> -->
+<!-- 					</execution> -->
+<!-- 				</executions> -->
+<!-- 			</plugin> -->
 			<plugin>
 				<groupId>org.codehaus.mojo</groupId>
 				<artifactId>properties-maven-plugin</artifactId>
@@ -100,33 +100,20 @@
 					</execution>
 				</executions>
 			</plugin>
-			<plugin>
-				<artifactId>maven-assembly-plugin</artifactId>
-				<executions>
-					<execution>
-						<id>assembly</id>
-						<phase>package</phase>
-						<goals>
-							<goal>single</goal>
-						</goals>
-					</execution>
-				</executions>
-				<configuration>
-					<finalName>${assembly.dir}</finalName>
-					<descriptors>
-						<descriptor>${basedir}/src/main/resources/assembly.xml</descriptor>
-					</descriptors>
-					<archive>
-						<manifest>
-							<addClasspath>true</addClasspath>
-							<mainClass>edu.scripps.yates.censustmt2msstatstmt.CensusTMT2MSstatsTMT</mainClass>
-							<classpathPrefix>lib/</classpathPrefix>
-							<useUniqueVersions>false</useUniqueVersions>
-						</manifest>
-					</archive>
-				</configuration>
-			</plugin>
-			<plugin>
+			
+			
+
+		</plugins>
+	</build>
+	<profiles>
+		<profile>
+		<id>command_line</id>
+<!--          <activation> -->
+<!--             <activeByDefault>true</activeByDefault> -->
+<!--          </activation> -->
+         <build>
+            <plugins>
+            	<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-source-plugin</artifactId>
 				<version>2.2.1</version>
@@ -140,7 +127,7 @@
 					</execution>
 				</executions>
 				<configuration>
-					<finalName>CensusTMT2MSstatsTMT</finalName>    
+					<finalName>Census2MSstatsTMT</finalName>    
 				</configuration>
 			</plugin>
 			<plugin>
@@ -158,7 +145,115 @@
 					</archive>
 				</configuration>
 			</plugin>
-
-		</plugins>
-	</build>
+			 
+               <plugin>
+                  <artifactId>maven-assembly-plugin</artifactId>
+                  <version>3.3.0</version>
+                   <executions>
+                     <execution>
+                        <id>make-assembly</id> <!-- this is used for inheritance merges -->
+                        <phase>package</phase> <!-- bind to the packaging phase -->
+                        <goals>
+                           <goal>single</goal>
+                        </goals>
+                     </execution>
+                  </executions>
+                  <configuration>
+                     <finalName>Census2MSstatTMT_${project.version}</finalName>
+                      <appendAssemblyId>false</appendAssemblyId>
+                     <descriptors>
+                        <descriptor>${basedir}/src/main/resources/assembly.xml</descriptor>
+                     </descriptors>
+                      <descriptorRefs>
+			            <descriptorRef>jar-with-dependencies</descriptorRef>
+			          </descriptorRefs>
+                     <archive>
+		               	  <manifest>
+		                     <addClasspath>true</addClasspath>
+		                     <mainClass>edu.scripps.yates.censustmt2msstatstmt.CensusTMT2MSstatsTMT</mainClass>
+		                     <classpathPrefix>lib/</classpathPrefix>
+		                     <useUniqueVersions>false</useUniqueVersions>
+		                  </manifest>
+		               </archive>
+                  </configuration>
+               </plugin>
+            </plugins>
+         </build>
+      </profile>
+      <profile>
+		<id>gui</id>
+<!--          <activation> -->
+<!--             <activeByDefault>true</activeByDefault> -->
+<!--          </activation> -->
+         <build>
+            <plugins>
+            	<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-source-plugin</artifactId>
+				<version>2.2.1</version>
+				<executions>
+					<execution>
+						<id>attach-sources</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>jar-no-fork</goal>
+						</goals>
+					</execution>
+				</executions>
+				<configuration>
+					<finalName>Census2MSstatsTMT_GUI</finalName>    
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<version>3.0.2</version>
+				<configuration>
+					<archive>                   
+						<manifest>
+							<addClasspath>true</addClasspath>
+							<mainClass>edu.scripps.yates.censustmt2msstatstmt.CensusTMT2MSstatsTMTGui</mainClass>
+							<classpathPrefix>lib/</classpathPrefix>
+							<useUniqueVersions>false</useUniqueVersions>
+						</manifest>
+					</archive>
+				</configuration>
+			</plugin>
+			
+               <plugin>
+                  <artifactId>maven-assembly-plugin</artifactId>
+                  <version>3.3.0</version>
+                  <executions>
+                     <execution>
+                        <id>make-assembly</id> <!-- this is used for inheritance merges -->
+                        <phase>package</phase> <!-- bind to the packaging phase -->
+                        <goals>
+                           <goal>single</goal>
+                        </goals>
+                     </execution>
+                  </executions>
+                  <configuration>
+                      <finalName>Census2MSstatTMT_GUI_${project.version}</finalName>
+                       <appendAssemblyId>false</appendAssemblyId>
+                     <descriptors>
+                        <descriptor>${basedir}/src/main/resources/assembly.xml</descriptor>
+                     </descriptors>
+                     <descriptorRefs>
+			            <descriptorRef>jar-with-dependencies</descriptorRef>
+			          </descriptorRefs>
+                     <archive>
+		               	  <manifest>
+		                     <addClasspath>true</addClasspath>
+		                     <mainClass>edu.scripps.yates.censustmt2msstatstmt.CensusTMT2MSstatsTMTGui</mainClass>
+		                     <classpathPrefix>lib/</classpathPrefix>
+		                     <useUniqueVersions>false</useUniqueVersions>
+		                  </manifest>
+		               </archive>
+                  </configuration>
+               </plugin>
+            </plugins>
+         </build>
+      </profile>
+	
+	</profiles>
 </project>
