@@ -159,7 +159,7 @@
                      </execution>
                   </executions>
                   <configuration>
-                     <finalName>Census2MSstatTMT_${project.version}</finalName>
+                     <finalName>Census2MSstatsTMT_${project.version}</finalName>
                       <appendAssemblyId>false</appendAssemblyId>
                      <descriptors>
                         <descriptor>${basedir}/src/main/resources/assembly.xml</descriptor>
@@ -233,7 +233,7 @@
                      </execution>
                   </executions>
                   <configuration>
-                      <finalName>Census2MSstatTMT_GUI_${project.version}</finalName>
+                      <finalName>Census2MSstatsTMT_GUI_${project.version}</finalName>
                        <appendAssemblyId>false</appendAssemblyId>
                      <descriptors>
                         <descriptor>${basedir}/src/main/resources/assembly.xml</descriptor>
