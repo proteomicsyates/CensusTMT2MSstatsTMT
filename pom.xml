@@ -52,29 +52,29 @@
 					<target>1.8</target>
 				</configuration>
 			</plugin>
-			<!-- <plugin> -->
-			<!-- <artifactId>maven-dependency-plugin</artifactId> -->
-			<!-- <executions> -->
-			<!-- <execution> -->
-			<!-- <id>copy-dependencies</id> -->
-			<!-- <phase>package</phase> -->
-			<!-- <goals> -->
-			<!-- <goal>copy-dependencies</goal> -->
-			<!-- </goals> -->
-			<!-- <configuration> -->
-			<!-- <outputDirectory>${project.build.directory}/${lib.dir}</outputDirectory> -->
-			<!-- <overWriteReleases>true</overWriteReleases> -->
-			<!-- <overWriteSnapshots>true</overWriteSnapshots> -->
-			<!-- <overWriteIfNewer>true</overWriteIfNewer> -->
-			<!-- useBaseVersion=false makes the jar names match those -->
-			<!-- that maven-jar-plugin puts in the manifest classpath -->
-			<!-- Either append the artifact's baseVersion or uniqueVersion to the 
-				filename. Will only be used if isStripVersion() is false. -->
-			<!-- <useBaseVersion>true</useBaseVersion> -->
-			<!-- </configuration> -->
-			<!-- </execution> -->
-			<!-- </executions> -->
-			<!-- </plugin> -->
+			<plugin>
+			<artifactId>maven-dependency-plugin</artifactId>
+			<executions>
+			<execution>
+			<id>copy-dependencies</id>
+			<phase>package</phase>
+			<goals>
+			<goal>copy-dependencies</goal>
+			</goals>
+			<configuration>
+			<outputDirectory>${project.build.directory}/${lib.dir}</outputDirectory>
+			<overWriteReleases>true</overWriteReleases>
+			<overWriteSnapshots>true</overWriteSnapshots>
+			<overWriteIfNewer>true</overWriteIfNewer>
+<!-- 			useBaseVersion=false makes the jar names match those -->
+<!-- 			that maven-jar-plugin puts in the manifest classpath -->
+<!-- 			Either append the artifact's baseVersion or uniqueVersion to the  -->
+<!-- 				filename. Will only be used if isStripVersion() is false. -->
+			<useBaseVersion>true</useBaseVersion>
+			</configuration>
+			</execution>
+			</executions>
+			</plugin>
 			<plugin>
 				<groupId>org.codehaus.mojo</groupId>
 				<artifactId>properties-maven-plugin</artifactId>
@@ -143,7 +143,7 @@
 									<useUniqueVersions>false</useUniqueVersions>
 								</manifest>
 							</archive>
-							<finalName>Census2MSstatsTMT</finalName>
+							<finalName>Census2MSstatsTMT_${project.version}</finalName>
 						</configuration>
 					</plugin>
 
@@ -215,7 +215,7 @@
 									<useUniqueVersions>false</useUniqueVersions>
 								</manifest>
 							</archive>
-							<finalName>Census2MSstatsTMT_GUI</finalName>
+							<finalName>Census2MSstatsTMT_GUI_${project.version}</finalName>
 						</configuration>
 					</plugin>
 
