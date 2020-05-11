@@ -235,7 +235,7 @@
 							<finalName>Census2MSstatsTMT_GUI_${project.version}</finalName>
 							<appendAssemblyId>false</appendAssemblyId>
 							<descriptors>
-								<descriptor>${basedir}/src/main/resources/assembly.xml</descriptor>
+								<descriptor>${basedir}/src/main/resources/assembly_GUI.xml</descriptor>
 							</descriptors>
 							<descriptorRefs>
 								<descriptorRef>jar-with-dependencies</descriptorRef>
