@@ -31,6 +31,7 @@ import edu.scripps.yates.utilities.progresscounter.ProgressPrintingType;
 import edu.scripps.yates.utilities.properties.PropertiesUtil;
 import edu.scripps.yates.utilities.proteomicsmodel.Amount;
 import edu.scripps.yates.utilities.proteomicsmodel.enums.AmountType;
+import edu.scripps.yates.utilities.strings.StringUtils;
 import edu.scripps.yates.utilities.swing.CommandLineProgramGuiEnclosable;
 import gnu.trove.list.TDoubleList;
 import gnu.trove.list.array.TDoubleArrayList;
@@ -196,7 +197,8 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			final List<QuantifiedPSMInterface> psmsOfSeq = psmsBySequenceAndCharge.get(seq);
 
 			final List<String> accs = getAccToPrint(psmsOfSeq);
-			final String acc = accs.get(0);
+			final String acc = StringUtils.getSortedSeparatedValueStringFromChars(accs, ",");
+
 			validProteins.add(acc);
 
 			final int charge = getChargeToPrint(psmsOfSeq);
