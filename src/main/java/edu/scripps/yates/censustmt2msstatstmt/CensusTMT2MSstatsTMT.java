@@ -167,7 +167,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 					psmsIterator.remove();
 				}
 			}
-			System.out.print("\n- " + discardedProteins.size() + " proteins discarded for not having at least "
+			System.out.print("\n " + discardedProteins.size() + " proteins discarded for not having at least "
 					+ minNumPeptides + " peptides (sequence+charge).");
 			if (uniquePeptides) {
 				System.out.print(" " + psmsDiscardedByUniqueness + " PSMs discarded because they are not unique.");
@@ -384,8 +384,8 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 		final QuantCondition condition = experimentalDesign.getConditionByLabel().get(label);
 		final String conditionName = condition.getName().split(ExperimentalDesign.SYMBOL)[0];
 		final String mixture = experimentalDesign.getMixtureByRun(run);
-		final int techRepMixture = experimentalDesign.getTechRepMixtureByRun(run);
-		final int bioReplicate = experimentalDesign.getBioReplicate(channel, techRepMixture, mixture);
+		final String techRepMixture = experimentalDesign.getTechRepMixtureByRun(run);
+		final String bioReplicate = experimentalDesign.getBioReplicate(channel, techRepMixture, mixture);
 		String channelString = Double.valueOf(channel).toString();
 		if (experimentalDesign.isTMT6Plex()) {
 			channelString = String.valueOf(Double.valueOf(channel).intValue());
