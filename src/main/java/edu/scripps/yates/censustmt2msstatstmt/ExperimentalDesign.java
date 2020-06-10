@@ -30,8 +30,9 @@ public class ExperimentalDesign {
 	private final Map<String, TDoubleList> channelsByConditions = new THashMap<String, TDoubleList>();
 	private final TDoubleSet totalChannels = new TDoubleHashSet();
 	private final Map<String, String> mixtureByRun = new THashMap<String, String>();
-	private final TObjectIntMap<String> techRepMixtureByRun = new TObjectIntHashMap<String>();
-	private final TObjectIntMap<String> bioReplicateByChannelTechRepMixtureAndMixture = new TObjectIntHashMap<String>();
+	private final Map<String, String> techRepMixtureByRun = new THashMap<String, String>();
+	private final Map<String, String> bioReplicateByChannelTechRepMixtureAndMixture = new THashMap<String, String>();
+	private final Map<String, QuantCondition> conditionsByName = new THashMap<String, QuantCondition>();
 
 	public ExperimentalDesign(File experimentalDesignFile, String separator) throws IOException {
 		this.separator = separator;
@@ -42,12 +43,12 @@ public class ExperimentalDesign {
 			final String line = lines.get(numLine);
 			final String[] split = line.split(separator);
 			final String run = split[indexByHeader.get(RUN)];
-			final int fraction = Integer.valueOf(split[indexByHeader.get(FRACTION)]);
-			final int techRepMixture = Integer.valueOf(split[indexByHeader.get(TECH_REP_MIXTURE)]);
+			final String fraction = split[indexByHeader.get(FRACTION)];
+			final String techRepMixture = split[indexByHeader.get(TECH_REP_MIXTURE)];
 			final double channel = Double.valueOf(split[indexByHeader.get(CHANNEL)]);
 			final String condition = split[indexByHeader.get(CONDITION)] + SYMBOL + channel;
 			final String mixture = split[indexByHeader.get(MIXTURE)];
-			final int bioReplicate = Integer.valueOf(split[indexByHeader.get(BIO_REPLICATE)]);
+			final String bioReplicate = split[indexByHeader.get(BIO_REPLICATE)];
 			//
 			TDoubleList channels = null;
 			if (channelsByConditions.containsKey(condition)) {
@@ -76,10 +77,16 @@ public class ExperimentalDesign {
 	public Map<QuantificationLabel, QuantCondition> getConditionByLabel() {
 		final Map<QuantificationLabel, QuantCondition> ret = new THashMap<QuantificationLabel, QuantCondition>();
 		for (final String condition : this.channelsByConditions.keySet()) {
+			QuantCondition quantCondition = null;
+			if (conditionsByName.containsKey(condition)) {
+				quantCondition = conditionsByName.get(condition);
+			} else {
+				quantCondition = new QuantCondition(condition);
+			}
 			final TDoubleList channels = channelsByConditions.get(condition);
 			for (final double channel : channels.toArray()) {
 				final QuantificationLabel label = getLabelFromChannel(channel);
-				ret.put(label, new QuantCondition(condition));
+				ret.put(label, quantCondition);
 			}
 		}
 		return ret;
@@ -149,11 +156,11 @@ public class ExperimentalDesign {
 		return mixtureByRun.get(run);
 	}
 
-	public int getTechRepMixtureByRun(String run) {
+	public String getTechRepMixtureByRun(String run) {
 		return techRepMixtureByRun.get(run);
 	}
 
-	public int getBioReplicate(double channel, int techRepMixture, String mixture) {
+	public String getBioReplicate(double channel, String techRepMixture, String mixture) {
 		return bioReplicateByChannelTechRepMixtureAndMixture.get(channel + techRepMixture + mixture);
 	}
 
