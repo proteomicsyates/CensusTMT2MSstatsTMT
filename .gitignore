@@ -28,3 +28,4 @@ hs_err_pid*
 .settings/
 logs/
 target/
+/default.properties
