@@ -1,1 +1,1 @@
-java -jar -Xms64m -Xmx1024m Census2MSstatsTMT_GUI_1.0.0-SNAPSHOT.jar
+java -jar -Xms64m -Xmx4g Census2MSstatsTMT_GUI_1.0.0-SNAPSHOT.jar
