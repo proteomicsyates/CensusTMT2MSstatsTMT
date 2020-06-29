@@ -33,6 +33,7 @@ import edu.scripps.yates.utilities.proteomicsmodel.Amount;
 import edu.scripps.yates.utilities.proteomicsmodel.enums.AmountType;
 import edu.scripps.yates.utilities.strings.StringUtils;
 import edu.scripps.yates.utilities.swing.CommandLineProgramGuiEnclosable;
+import edu.scripps.yates.utilities.swing.DoNotInvokeRunMethod;
 import gnu.trove.list.TDoubleList;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.map.TObjectDoubleMap;
@@ -87,6 +88,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			if (c != null) {
 				c.errorInParameters(e.getMessage());
 			}
+		} catch (final DoNotInvokeRunMethod e) {
 		} catch (final Exception e) {
 			e.printStackTrace();
 			System.err.println(e.getMessage());
@@ -301,7 +303,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 					final String name = amount.getCondition().getName();
 					final String[] split = name.split(ExperimentalDesign.SYMBOL);
 					final String conditionName = split[0];
-					final int channel = Integer.valueOf(split[1]);
+					final double channel = Double.valueOf(split[1]);
 					final QuantificationLabel label = ExperimentalDesign.getTMT6LabelFromChannel(channel);
 					// for the average, don't use the zero
 					if (Double.compare(0.0, amount.getValue()) == 0) {
@@ -337,7 +339,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 					final String name = amount.getCondition().getName();
 					final String[] split = name.split(ExperimentalDesign.SYMBOL);
 					final String conditionName = split[0];
-					final int channel = Integer.valueOf(split[1]);
+					final double channel = Double.valueOf(split[1]);
 					final QuantificationLabel label = ExperimentalDesign.getTMT6LabelFromChannel(channel);
 					if (!ret.containsKey(label)) {
 						ret.put(label, amount.getValue());
@@ -465,7 +467,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 	}
 
 	@Override
-	protected void setCommandLine(CommandLine cmd) {
+	protected void setCommandLine(CommandLine cmd) throws DoNotInvokeRunMethod {
 		File inputFile = null;
 		File experimentalDesignFile = null;
 		final String experimentalDesignSeparator = ",";
