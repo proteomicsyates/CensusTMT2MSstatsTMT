@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -36,10 +37,7 @@ import edu.scripps.yates.utilities.swing.CommandLineProgramGuiEnclosable;
 import edu.scripps.yates.utilities.swing.DoNotInvokeRunMethod;
 import gnu.trove.list.TDoubleList;
 import gnu.trove.list.array.TDoubleArrayList;
-import gnu.trove.map.TObjectDoubleMap;
-import gnu.trove.map.custom_hash.TObjectDoubleCustomHashMap;
 import gnu.trove.map.hash.THashMap;
-import gnu.trove.map.hash.TObjectDoubleHashMap;
 import gnu.trove.set.hash.THashSet;
 
 public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
@@ -204,8 +202,8 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			validProteins.add(acc);
 
 			final int charge = getChargeToPrint(psmsOfSeq);
-			final TObjectDoubleMap<QuantificationLabel> intensities = getIntensitiesToPrint(psmsOfSeq,
-					this.psmSelection, this.useRawIntensity);
+			final Map<QuantificationLabel, Double> intensities = getIntensitiesToPrint(psmsOfSeq, this.psmSelection,
+					this.useRawIntensity);
 			final QuantifiedPSMInterface firstPSM = psmsOfSeq.get(0);
 			final String peptideSequence = firstPSM.getBeforeSeq() + "." + firstPSM.getSequence() + "."
 					+ firstPSM.getAfterSeq();
@@ -231,7 +229,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 
 	}
 
-	private TObjectDoubleMap<QuantificationLabel> getIntensitiesToPrint(List<QuantifiedPSMInterface> psms,
+	private Map<QuantificationLabel, Double> getIntensitiesToPrint(List<QuantifiedPSMInterface> psms,
 			PSMSelectionType psmSelection, boolean useRawIntensity) {
 
 		switch (psmSelection) {
@@ -247,12 +245,12 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 
 	}
 
-	private TObjectDoubleMap<QuantificationLabel> getHighestIntensitiesToPrint(List<QuantifiedPSMInterface> psms,
+	private Map<QuantificationLabel, Double> getHighestIntensitiesToPrint(List<QuantifiedPSMInterface> psms,
 			boolean useRawIntensity) {
 		QuantifiedPSMInterface highestPSM = null;
 		double highestSum = -Double.MAX_VALUE;
 		for (final QuantifiedPSMInterface psm : psms) {
-			final TObjectDoubleMap<QuantificationLabel> ret = getIntensitiesFromPSM(psm, useRawIntensity);
+			final Map<QuantificationLabel, Double> ret = getIntensitiesFromPSM(psm, useRawIntensity);
 			double sum = 0.0;
 			for (final double intensity : ret.values()) {
 				sum += intensity;
@@ -266,9 +264,10 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 		return getIntensitiesFromPSM(highestPSM, useRawIntensity);
 	}
 
-	private TObjectDoubleMap<QuantificationLabel> getIntensitiesFromPSM(QuantifiedPSMInterface psm,
+	private Map<QuantificationLabel, Double> getIntensitiesFromPSM(QuantifiedPSMInterface psm,
 			boolean useRawIntensity) {
-		final TObjectDoubleMap<QuantificationLabel> ret = new TObjectDoubleHashMap<QuantificationLabel>();
+		final Map<QuantificationLabel, Double> ret = new EnumMap<QuantificationLabel, Double>(
+				QuantificationLabel.class);
 		final Set<Amount> amounts = psm.getAmounts();
 		for (final Amount amount : amounts) {
 			if (amount.getAmountType() == AmountType.NORMALIZED_INTENSITY && useRawIntensity) {
@@ -288,9 +287,10 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 		return ret;
 	}
 
-	private TObjectDoubleMap<QuantificationLabel> getAveragedIntensitiesToPrint(List<QuantifiedPSMInterface> psms,
+	private Map<QuantificationLabel, Double> getAveragedIntensitiesToPrint(List<QuantifiedPSMInterface> psms,
 			boolean useRawIntensity) {
-		final Map<QuantificationLabel, TDoubleList> toAverage = new THashMap<QuantificationLabel, TDoubleList>();
+		final Map<QuantificationLabel, TDoubleList> toAverage = new EnumMap<QuantificationLabel, TDoubleList>(
+				QuantificationLabel.class);
 		for (final QuantifiedPSMInterface psm : psms) {
 			final Set<Amount> amounts = psm.getAmounts();
 			for (final Amount amount : amounts) {
@@ -317,16 +317,18 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 				}
 			}
 		}
-		final TObjectDoubleMap<QuantificationLabel> ret = new TObjectDoubleCustomHashMap<QuantificationLabel>();
+		final Map<QuantificationLabel, Double> ret = new EnumMap<QuantificationLabel, Double>(
+				QuantificationLabel.class);
 		for (final QuantificationLabel label : toAverage.keySet()) {
 			ret.put(label, Maths.mean(toAverage.get(label)));
 		}
 		return ret;
 	}
 
-	private TObjectDoubleMap<QuantificationLabel> getSummedIntensitiesToPrint(List<QuantifiedPSMInterface> psms,
+	private Map<QuantificationLabel, Double> getSummedIntensitiesToPrint(List<QuantifiedPSMInterface> psms,
 			boolean useRawIntensity) {
-		final TObjectDoubleMap<QuantificationLabel> ret = new TObjectDoubleCustomHashMap<QuantificationLabel>();
+		final Map<QuantificationLabel, Double> ret = new EnumMap<QuantificationLabel, Double>(
+				QuantificationLabel.class);
 		for (final QuantifiedPSMInterface psm : psms) {
 			final Set<Amount> amounts = psm.getAmounts();
 			for (final Amount amount : amounts) {
@@ -338,7 +340,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 						|| amount.getAmountType() == AmountType.NORMALIZED_INTENSITY) {
 					final String name = amount.getCondition().getName();
 					final String[] split = name.split(ExperimentalDesign.SYMBOL);
-					final String conditionName = split[0];
+//					final String conditionName = split[0];
 					final double channel = Double.valueOf(split[1]);
 					final QuantificationLabel label = ExperimentalDesign.getTMT6LabelFromChannel(channel);
 					if (!ret.containsKey(label)) {
