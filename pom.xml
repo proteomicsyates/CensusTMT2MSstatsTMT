@@ -4,7 +4,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>edu.scripps.yates</groupId>
 	<artifactId>CensusTMT2MSstatsTMT</artifactId>
-	<version>1.0.3-SNAPSHOT</version>
+	<version>1.0.4-SNAPSHOT</version>
 	<distributionManagement>
 		<repository>
 			<id>internal</id>
@@ -109,78 +109,7 @@
 		</plugins>
 	</build>
 	<profiles>
-		<profile>
-			<id>command_line</id>
-			<!-- <activation> -->
-			<!-- <activeByDefault>true</activeByDefault> -->
-			<!-- </activation> -->
-			<build>
-				<plugins>
-					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-source-plugin</artifactId>
-						<version>2.2.1</version>
-						<executions>
-							<execution>
-								<id>attach-sources</id>
-								<phase>verify</phase>
-								<goals>
-									<goal>jar-no-fork</goal>
-								</goals>
-							</execution>
-						</executions>
-					</plugin>
-					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-jar-plugin</artifactId>
-						<version>3.0.2</version>
-						<configuration>
-							<archive>
-								<manifest>
-									<addClasspath>true</addClasspath>
-									<mainClass>edu.scripps.yates.censustmt2msstatstmt.CensusTMT2MSstatsTMT</mainClass>
-									<classpathPrefix>lib/</classpathPrefix>
-									<useUniqueVersions>false</useUniqueVersions>
-								</manifest>
-							</archive>
-							<finalName>Census2MSstatsTMT_${project.version}</finalName>
-						</configuration>
-					</plugin>
-
-					<plugin>
-						<artifactId>maven-assembly-plugin</artifactId>
-						<version>3.3.0</version>
-						<executions>
-							<execution>
-								<id>make-assembly</id> <!-- this is used for inheritance merges -->
-								<phase>package</phase> <!-- bind to the packaging phase -->
-								<goals>
-									<goal>single</goal>
-								</goals>
-							</execution>
-						</executions>
-						<configuration>
-							<finalName>Census2MSstatsTMT_${project.version}</finalName>
-							<appendAssemblyId>false</appendAssemblyId>
-							<descriptors>
-								<descriptor>${basedir}/src/main/resources/assembly.xml</descriptor>
-							</descriptors>
-							<descriptorRefs>
-								<descriptorRef>jar-with-dependencies</descriptorRef>
-							</descriptorRefs>
-							<archive>
-								<manifest>
-									<addClasspath>true</addClasspath>
-									<mainClass>edu.scripps.yates.censustmt2msstatstmt.CensusTMT2MSstatsTMT</mainClass>
-									<classpathPrefix>lib/</classpathPrefix>
-									<useUniqueVersions>false</useUniqueVersions>
-								</manifest>
-							</archive>
-						</configuration>
-					</plugin>
-				</plugins>
-			</build>
-		</profile>
+		 
 		<profile>
 			<id>gui</id>
 			<!-- <activation> -->
@@ -210,7 +139,7 @@
 							<archive>
 								<manifest>
 									<addClasspath>true</addClasspath>
-									<mainClass>edu.scripps.yates.censustmt2msstatstmt.CensusTMT2MSstatsTMTGui</mainClass>
+									<mainClass>edu.scripps.yates.censustmt2msstatstmt.CensusTMT2MSstatsTMT</mainClass>
 									<classpathPrefix>lib/</classpathPrefix>
 									<useUniqueVersions>false</useUniqueVersions>
 								</manifest>
@@ -243,7 +172,7 @@
 							<archive>
 								<manifest>
 									<addClasspath>true</addClasspath>
-									<mainClass>edu.scripps.yates.censustmt2msstatstmt.CensusTMT2MSstatsTMTGui</mainClass>
+									<mainClass>edu.scripps.yates.censustmt2msstatstmt.CensusTMT2MSstatsTMT</mainClass>
 									<classpathPrefix>lib/</classpathPrefix>
 									<useUniqueVersions>false</useUniqueVersions>
 								</manifest>

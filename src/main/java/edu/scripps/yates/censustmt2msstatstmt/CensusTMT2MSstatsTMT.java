@@ -12,9 +12,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.DefaultParser;
-import org.apache.commons.cli.Options;
+import org.apache.commons.cli.Option;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.log4j.Logger;
@@ -35,6 +33,7 @@ import edu.scripps.yates.utilities.proteomicsmodel.enums.AmountType;
 import edu.scripps.yates.utilities.strings.StringUtils;
 import edu.scripps.yates.utilities.swing.CommandLineProgramGuiEnclosable;
 import edu.scripps.yates.utilities.swing.DoNotInvokeRunMethod;
+import edu.scripps.yates.utilities.swing.SomeErrorInParametersOcurred;
 import gnu.trove.list.TDoubleList;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.map.hash.THashMap;
@@ -53,43 +52,34 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 	private ExperimentalDesign ed;
 	private int minNumPeptides;
 
-	public CensusTMT2MSstatsTMT(File inputFile, File experimentalDesignFile, String experimentalDesignSeparator,
-			boolean uniquePeptides, boolean useRawIntensity, String decoyPrefix, PSMSelectionType psmSelection) {
-		super(null);// we dont use that functionality to create GUI here
-		this.inputFile = inputFile;
-		this.experimentalDesignFile = experimentalDesignFile;
-		this.experimentalDesignSeparator = experimentalDesignSeparator;
-		this.uniquePeptides = uniquePeptides;
-		this.useRawIntensity = useRawIntensity;
-		this.decoyPrefix = decoyPrefix;
-		this.psmSelection = psmSelection;
-	}
+//	public CensusTMT2MSstatsTMT(File inputFile, File experimentalDesignFile, String experimentalDesignSeparator,
+//			boolean uniquePeptides, boolean useRawIntensity, String decoyPrefix, PSMSelectionType psmSelection) {
+//		super(null);// we dont use that functionality to create GUI here
+//		this.inputFile = inputFile;
+//		this.experimentalDesignFile = experimentalDesignFile;
+//		this.experimentalDesignSeparator = experimentalDesignSeparator;
+//		this.uniquePeptides = uniquePeptides;
+//		this.useRawIntensity = useRawIntensity;
+//		this.decoyPrefix = decoyPrefix;
+//		this.psmSelection = psmSelection;
+//	}
 
-	public CensusTMT2MSstatsTMT(Options options) {
-		super(options);
+	public CensusTMT2MSstatsTMT(String[] args)
+			throws ParseException, DoNotInvokeRunMethod, SomeErrorInParametersOcurred {
+		super(args);
 
 	}
 
 	public static void main(String[] args) {
 
-		final CommandLineParser parser = new DefaultParser();
-		final Options options = setupCommandLineOptions();
 		CensusTMT2MSstatsTMT c = null;
 		try {
-			c = new CensusTMT2MSstatsTMT(options);
-
-			final CommandLine cmd = parser.parse(options, args);
-			c.setCommandLine(cmd);
+			c = new CensusTMT2MSstatsTMT(args);
 			c.run();
-		} catch (final ParseException e) {
-			e.printStackTrace();
-			if (c != null) {
-				c.errorInParameters(e.getMessage());
-			}
 		} catch (final DoNotInvokeRunMethod e) {
+			// do nothing
 		} catch (final Exception e) {
 			e.printStackTrace();
-			System.err.println(e.getMessage());
 		}
 	}
 
@@ -432,30 +422,39 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 
 	}
 
-	protected static Options setupCommandLineOptions() {
+	@Override
+	protected List<Option> defineCommandLineOptions() {
 		// create Options object
-		final Options options = new Options();
+		final List<Option> options = new ArrayList<Option>();
 
 		// add t option
-		options.addRequiredOption("i", "input", true, "Path to the input file.");
-		options.addRequiredOption("an", "annotation", true, "Path to the experimental design file.");
-		options.addOption("ps", "psm_selection", true,
+		final Option option1 = new Option("i", "input", true, "Path to the input file.");
+		option1.setRequired(true);
+		options.add(option1);
+		final Option option2 = new Option("an", "annotation", true, "Path to the experimental design file.");
+		option2.setRequired(true);
+		options.add(option2);
+
+		final Option option3 = new Option("ps", "psm_selection", true,
 				"[OPTIONAL] What to do with multiple PSMs of the same peptide (SUM, AVERAGE or HIGHEST). If not provided, HIGHEST will be choosen.");
-		options.addOption("u", "unique", false,
+		options.add(option3);
+
+		final Option option4 = new Option("u", "unique", false,
 				"[OPTIONAL] Use only unique peptides. If not provided, all peptides will be used.");
-		options.addOption("r", "raw", false,
+		options.add(option4);
+
+		final Option option5 = new Option("r", "raw", false,
 				"[OPTIONAL] Use of raw intensity. If not provided, normalized intensity will be used.");
-		options.addOption("d", "decoy", true,
+		options.add(option5);
+
+		final Option option6 = new Option("d", "decoy", true,
 				"[OPTIONAL] Remove decoy hits. Decoys hits will have this prefix in their accession number. If not provided, no decoy filtering will be used.");
-		options.addOption("m", "minPeptides", true,
+		options.add(option6);
+
+		final Option option7 = new Option("m", "minPeptides", true,
 				"[OPTIONAL] Minimum number of peptides+charge per protein. If not provided, even proteins with 1 peptide will be quantified");
+		options.add(option7);
 		return options;
-	}
-
-	@Override
-	public Options getCommandLineOptions() {
-
-		return setupCommandLineOptions();
 	}
 
 	@Override
@@ -469,7 +468,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 	}
 
 	@Override
-	protected void setCommandLine(CommandLine cmd) throws DoNotInvokeRunMethod {
+	protected void initToolFromCommandLineOptions(CommandLine cmd) throws SomeErrorInParametersOcurred {
 		File inputFile = null;
 		File experimentalDesignFile = null;
 		final String experimentalDesignSeparator = ",";
