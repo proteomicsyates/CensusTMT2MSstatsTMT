@@ -17,7 +17,7 @@
         <fileSet>
             <directory>target</directory>
             <includes>
-                <include>Census2MSstatsTMT_*SNAPSHOT.jar</include>
+                <include>CensusTMT2MSstatsTMT-*SNAPSHOT.jar</include>
             </includes>
             <outputDirectory>${assembly.output.folder}</outputDirectory>
         </fileSet> 
@@ -28,13 +28,14 @@
             </includes>
             <outputDirectory>${assembly.output.folder}/${lib.dir}</outputDirectory>
         </fileSet>
-<!--         <fileSet> -->
-<!--             <directory></directory> -->
-<!--             <includes> -->
-<!--                 <include>input*.properties</include> -->
-<!--             </includes> -->
-<!--             <outputDirectory>${assembly.output.folder}</outputDirectory> -->
-<!--         </fileSet> -->
+        <fileSet>
+            <directory></directory>
+            <includes>
+                <include>START*.sh</include>
+                <include>START*.bat</include>
+            </includes>
+            <outputDirectory>${assembly.output.folder}</outputDirectory>
+        </fileSet>
     </fileSets>
 
  

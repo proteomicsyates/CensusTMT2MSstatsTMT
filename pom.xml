@@ -19,7 +19,7 @@
 		<assembly.output.folder>CensusTMT2MSstatsTMT</assembly.output.folder>
 		<lib.dir>lib</lib.dir>
 		<project.build.sourceEncoding>ISO-8859-1</project.build.sourceEncoding>
-		<assembly.dir>CensusTMT2MSstatsTMT_v${project.version}</assembly.dir>
+		<assembly.dir>CensusTMT2MSstatsTMT-v${project.version}</assembly.dir>
 	</properties>
 	<organization>
 		<name>TSRI</name>
@@ -144,7 +144,7 @@
 									<useUniqueVersions>false</useUniqueVersions>
 								</manifest>
 							</archive>
-							<finalName>Census2MSstatsTMT_GUI_${project.version}</finalName>
+							<finalName>CensusTMT2MSstatsTMT-${project.version}</finalName>
 						</configuration>
 					</plugin>
 
@@ -161,10 +161,10 @@
 							</execution>
 						</executions>
 						<configuration>
-							<finalName>Census2MSstatsTMT_GUI_${project.version}</finalName>
+							<finalName>CensusTMT2MSstatsTMT-${project.version}</finalName>
 							<appendAssemblyId>false</appendAssemblyId>
 							<descriptors>
-								<descriptor>${basedir}/src/main/resources/assembly_GUI.xml</descriptor>
+								<descriptor>${basedir}/src/main/resources/assembly.xml</descriptor>
 							</descriptors>
 							<descriptorRefs>
 								<descriptorRef>jar-with-dependencies</descriptorRef>
