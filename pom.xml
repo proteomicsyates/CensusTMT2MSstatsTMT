@@ -53,27 +53,27 @@
 				</configuration>
 			</plugin>
 			<plugin>
-			<artifactId>maven-dependency-plugin</artifactId>
-			<executions>
-			<execution>
-			<id>copy-dependencies</id>
-			<phase>package</phase>
-			<goals>
-			<goal>copy-dependencies</goal>
-			</goals>
-			<configuration>
-			<outputDirectory>${project.build.directory}/${lib.dir}</outputDirectory>
-			<overWriteReleases>true</overWriteReleases>
-			<overWriteSnapshots>true</overWriteSnapshots>
-			<overWriteIfNewer>true</overWriteIfNewer>
-<!-- 			useBaseVersion=false makes the jar names match those -->
-<!-- 			that maven-jar-plugin puts in the manifest classpath -->
-<!-- 			Either append the artifact's baseVersion or uniqueVersion to the  -->
-<!-- 				filename. Will only be used if isStripVersion() is false. -->
-			<useBaseVersion>true</useBaseVersion>
-			</configuration>
-			</execution>
-			</executions>
+				<artifactId>maven-dependency-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>copy-dependencies</id>
+						<phase>package</phase>
+						<goals>
+							<goal>copy-dependencies</goal>
+						</goals>
+						<configuration>
+							<outputDirectory>${project.build.directory}/${lib.dir}</outputDirectory>
+							<overWriteReleases>true</overWriteReleases>
+							<overWriteSnapshots>true</overWriteSnapshots>
+							<overWriteIfNewer>true</overWriteIfNewer>
+							<!-- 			useBaseVersion=false makes the jar names match those -->
+							<!-- 			that maven-jar-plugin puts in the manifest classpath -->
+							<!-- 			Either append the artifact's baseVersion or uniqueVersion to the  -->
+							<!-- 				filename. Will only be used if isStripVersion() is false. -->
+							<useBaseVersion>true</useBaseVersion>
+						</configuration>
+					</execution>
+				</executions>
 			</plugin>
 			<plugin>
 				<groupId>org.codehaus.mojo</groupId>
@@ -109,7 +109,7 @@
 		</plugins>
 	</build>
 	<profiles>
-		 
+
 		<profile>
 			<id>gui</id>
 			<!-- <activation> -->
@@ -153,8 +153,10 @@
 						<version>3.3.0</version>
 						<executions>
 							<execution>
-								<id>make-assembly</id> <!-- this is used for inheritance merges -->
-								<phase>package</phase> <!-- bind to the packaging phase -->
+								<id>make-assembly</id>
+								<!-- this is used for inheritance merges -->
+								<phase>package</phase>
+								<!-- bind to the packaging phase -->
 								<goals>
 									<goal>single</goal>
 								</goals>
@@ -182,6 +184,5 @@
 				</plugins>
 			</build>
 		</profile>
-
 	</profiles>
 </project>
