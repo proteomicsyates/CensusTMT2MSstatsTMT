@@ -20,6 +20,7 @@ import org.springframework.core.io.ClassPathResource;
 
 import edu.scripps.yates.census.analysis.QuantCondition;
 import edu.scripps.yates.census.read.CensusOutParser;
+import edu.scripps.yates.census.read.WrongTMTLabels;
 import edu.scripps.yates.census.read.model.interfaces.QuantifiedPSMInterface;
 import edu.scripps.yates.census.read.model.interfaces.QuantifiedProteinInterface;
 import edu.scripps.yates.census.read.util.QuantificationLabel;
@@ -83,134 +84,142 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 		}
 	}
 
-	private void runConversion() throws IOException {
-		System.out.println("Starting conversion of file " + inputFile.getAbsolutePath());
-		final File outputFile = getOutputFile();
-		final FileWriter fw = new FileWriter(outputFile);
-		System.out.println("Output file: " + outputFile.getAbsolutePath());
-		// header
-		printHeader(fw);
-		final Map<QuantificationLabel, QuantCondition> conditionsByLabels = getExperimentalDesign()
-				.getConditionByLabel();
-		System.out.println("Reading input file...");
-		final CensusOutParser parser = new CensusOutParser(this.inputFile, conditionsByLabels);
-		final List<QuantifiedPSMInterface> psms = new ArrayList<QuantifiedPSMInterface>();
-		psms.addAll(parser.getPSMMap().values());
-		System.out.println(psms.size() + " PSMs read from input file.");
+	private void runConversion() throws Exception {
+		try {
+			ed = null;
+			System.out.println("Starting conversion of file " + inputFile.getAbsolutePath());
+			final File outputFile = getOutputFile();
+			final FileWriter fw = new FileWriter(outputFile);
+			System.out.println("Output file: " + outputFile.getAbsolutePath());
+			// header
+			printHeader(fw);
+			final Map<QuantificationLabel, QuantCondition> conditionsByLabels = getExperimentalDesign()
+					.getConditionByLabel();
+			System.out.println("Reading input file...");
+			final CensusOutParser parser = new CensusOutParser(this.inputFile, conditionsByLabels);
+			final List<QuantifiedPSMInterface> psms = new ArrayList<QuantifiedPSMInterface>();
+			psms.addAll(parser.getPSMMap().values());
+			System.out.println(psms.size() + " PSMs read from input file.");
 
-		// filter by min number of peptides per protein
+			// filter by min number of peptides per protein
 
-		final ProgressCounter counter = new ProgressCounter(psms.size(), ProgressPrintingType.PERCENTAGE_STEPS, 0);
-		Iterator<QuantifiedPSMInterface> psmsIterator = psms.iterator();
-		if (decoyPrefix != null && !"".equals(decoyPrefix)) {
-			final Set<QuantifiedProteinInterface> discardedProteins = new THashSet<QuantifiedProteinInterface>();
-			final int initialPSMs = psms.size();
-			while (psmsIterator.hasNext()) {
-				final QuantifiedPSMInterface psm = psmsIterator.next();
+			final ProgressCounter counter = new ProgressCounter(psms.size(), ProgressPrintingType.PERCENTAGE_STEPS, 0);
+			Iterator<QuantifiedPSMInterface> psmsIterator = psms.iterator();
+			if (decoyPrefix != null && !"".equals(decoyPrefix)) {
+				final Set<QuantifiedProteinInterface> discardedProteins = new THashSet<QuantifiedProteinInterface>();
+				final int initialPSMs = psms.size();
+				while (psmsIterator.hasNext()) {
+					final QuantifiedPSMInterface psm = psmsIterator.next();
 
-				for (final QuantifiedProteinInterface protein : psm.getQuantifiedProteins()) {
-					// //decoy
-					if (decoyPrefix != null && protein.getAccession().startsWith(decoyPrefix)) {
+					for (final QuantifiedProteinInterface protein : psm.getQuantifiedProteins()) {
+						// //decoy
+						if (decoyPrefix != null && protein.getAccession().startsWith(decoyPrefix)) {
+							psmsIterator.remove();
+							discardedProteins.add(protein);
+							break;
+						}
+					}
+				}
+				System.out.print("\n-" + discardedProteins.size() + " proteins discarded as DECOYs.");
+				System.out.println(" Now working with " + psms.size() + " PSMs (" + (initialPSMs - psms.size())
+						+ " discarded).\n");
+			}
+			if (minNumPeptides > 1 || uniquePeptides) {
+				int psmsDiscardedByUniqueness = 0;
+				final Set<QuantifiedProteinInterface> discardedProteins = new THashSet<QuantifiedProteinInterface>();
+				final int initialPSMs = psms.size();
+				// filtering by minNumPeptides
+				psmsIterator = psms.iterator();
+				while (psmsIterator.hasNext()) {
+					counter.increment();
+					final String printIfNecessary = counter.printIfNecessary();
+					if (!"".equals(printIfNecessary)) {
+						System.out.println("Filtering data..." + printIfNecessary);
+					}
+					final QuantifiedPSMInterface psm = psmsIterator.next();
+					if (uniquePeptides && psm.getQuantifiedProteins().size() > 1) {
 						psmsIterator.remove();
-						discardedProteins.add(protein);
-						break;
+						psmsDiscardedByUniqueness++;
+						continue;
+					}
+					boolean anyProteinIsValid = false;
+					for (final QuantifiedProteinInterface protein : psm.getQuantifiedProteins()) {
+						final Set<String> peptideCharges = new THashSet<String>();
+						protein.getQuantifiedPSMs().stream()
+								.forEach(p -> peptideCharges.add(p.getFullSequence() + p.getChargeState()));
+						if (peptideCharges.size() >= minNumPeptides) {
+							anyProteinIsValid = true;
+						} else {
+							discardedProteins.add(protein);
+						}
+					}
+					if (!anyProteinIsValid) {
+						psmsIterator.remove();
 					}
 				}
-			}
-			System.out.print("\n-" + discardedProteins.size() + " proteins discarded as DECOYs.");
-			System.out.println(
-					" Now working with " + psms.size() + " PSMs (" + (initialPSMs - psms.size()) + " discarded).\n");
-		}
-		if (minNumPeptides > 1 || uniquePeptides) {
-			int psmsDiscardedByUniqueness = 0;
-			final Set<QuantifiedProteinInterface> discardedProteins = new THashSet<QuantifiedProteinInterface>();
-			final int initialPSMs = psms.size();
-			// filtering by minNumPeptides
-			psmsIterator = psms.iterator();
-			while (psmsIterator.hasNext()) {
-				counter.increment();
-				final String printIfNecessary = counter.printIfNecessary();
-				if (!"".equals(printIfNecessary)) {
-					System.out.println("Filtering data..." + printIfNecessary);
+				System.out.print("\n " + discardedProteins.size() + " proteins discarded for not having at least "
+						+ minNumPeptides + " peptides (sequence+charge).");
+				if (uniquePeptides) {
+					System.out.print(" " + psmsDiscardedByUniqueness + " PSMs discarded because they are not unique.");
 				}
-				final QuantifiedPSMInterface psm = psmsIterator.next();
-				if (uniquePeptides && psm.getQuantifiedProteins().size() > 1) {
-					psmsIterator.remove();
-					psmsDiscardedByUniqueness++;
-					continue;
+				System.out.println(
+						" Now working with " + psms.size() + " PSMs (" + (initialPSMs - psms.size()) + " discarded).");
+
+			}
+
+			// create a map by sequence
+			final Map<String, List<QuantifiedPSMInterface>> psmsBySequenceAndCharge = new THashMap<String, List<QuantifiedPSMInterface>>();
+			for (final QuantifiedPSMInterface psm : psms) {
+				final String seq = psm.getBeforeSeq() + "." + psm.getSequence() + "." + psm.getAfterSeq() + "_"
+						+ psm.getChargeState();
+				if (!psmsBySequenceAndCharge.containsKey(seq)) {
+					psmsBySequenceAndCharge.put(seq, new ArrayList<QuantifiedPSMInterface>());
 				}
-				boolean anyProteinIsValid = false;
-				for (final QuantifiedProteinInterface protein : psm.getQuantifiedProteins()) {
-					if (protein.getAccession().equals("A0A096MJY1")) {
-						log.info("asdf");
-					}
-					final Set<String> peptideCharges = new THashSet<String>();
-					protein.getQuantifiedPSMs().stream()
-							.forEach(p -> peptideCharges.add(p.getFullSequence() + p.getChargeState()));
-					if (peptideCharges.size() >= minNumPeptides) {
-						anyProteinIsValid = true;
-					} else {
-						discardedProteins.add(protein);
-					}
+				psmsBySequenceAndCharge.get(seq).add(psm);
+			}
+
+			// iterate over it. Sort first the sequences so that they will appear in order
+			// in the output
+			final Set<String> seqsSet = psmsBySequenceAndCharge.keySet();
+			final List<String> seqList = seqsSet.stream().sorted().collect(Collectors.toCollection(ArrayList::new));
+			final Set<String> validProteins = new THashSet<String>();
+			for (final String seq : seqList) {
+				final List<QuantifiedPSMInterface> psmsOfSeq = psmsBySequenceAndCharge.get(seq);
+
+				final List<String> accs = getAccToPrint(psmsOfSeq);
+				final String acc = StringUtils.getSortedSeparatedValueStringFromChars(accs, ",");
+
+				validProteins.add(acc);
+
+				final int charge = getChargeToPrint(psmsOfSeq);
+				final Map<QuantificationLabel, Double> intensities = getIntensitiesToPrint(psmsOfSeq, this.psmSelection,
+						this.useRawIntensity);
+				final QuantifiedPSMInterface firstPSM = psmsOfSeq.get(0);
+				final String peptideSequence = firstPSM.getBeforeSeq() + "." + firstPSM.getSequence() + "."
+						+ firstPSM.getAfterSeq();
+				final String psm = peptideSequence + "_" + charge;
+				final String run = firstPSM.getMSRun().getRunId();
+				for (final QuantificationLabel label : intensities.keySet().stream().sorted()
+						.collect(Collectors.toList())) {
+					printOutputLine(fw, label, intensities.get(label), acc, charge, peptideSequence, psm, run);
 				}
-				if (!anyProteinIsValid) {
-					psmsIterator.remove();
-				}
-			}
-			System.out.print("\n " + discardedProteins.size() + " proteins discarded for not having at least "
-					+ minNumPeptides + " peptides (sequence+charge).");
-			if (uniquePeptides) {
-				System.out.print(" " + psmsDiscardedByUniqueness + " PSMs discarded because they are not unique.");
-			}
-			System.out.println(
-					" Now working with " + psms.size() + " PSMs (" + (initialPSMs - psms.size()) + " discarded).");
 
+			}
+			System.out.print("\n*******\nValid data: " + psms.size() + " PSMs");
+			System.out.print(", " + psmsBySequenceAndCharge.size() + " peptides (sequences+charge)");
+			System.out.println(", " + validProteins.size() + " proteins\n*******");
+			fw.close();
+			log.info("File written at " + outputFile.getAbsolutePath());
+			System.out.println("File ready at " + outputFile.getAbsolutePath());
+		} catch (final Exception e) {
+			if (e instanceof WrongTMTLabels) {
+				throw new WrongTMTLabels(
+						"Error in annotation file. The TMT channels in annotation file don't match with TMT channels in input file: "
+								+ e.getMessage());
+			} else {
+				throw e;
+			}
 		}
-
-		// create a map by sequence
-		final Map<String, List<QuantifiedPSMInterface>> psmsBySequenceAndCharge = new THashMap<String, List<QuantifiedPSMInterface>>();
-		for (final QuantifiedPSMInterface psm : psms) {
-			final String seq = psm.getBeforeSeq() + "." + psm.getSequence() + "." + psm.getAfterSeq() + "_"
-					+ psm.getChargeState();
-			if (!psmsBySequenceAndCharge.containsKey(seq)) {
-				psmsBySequenceAndCharge.put(seq, new ArrayList<QuantifiedPSMInterface>());
-			}
-			psmsBySequenceAndCharge.get(seq).add(psm);
-		}
-
-		// iterate over it. Sort first the sequences so that they will appear in order
-		// in the output
-		final Set<String> seqsSet = psmsBySequenceAndCharge.keySet();
-		final List<String> seqList = seqsSet.stream().sorted().collect(Collectors.toCollection(ArrayList::new));
-		final Set<String> validProteins = new THashSet<String>();
-		for (final String seq : seqList) {
-			final List<QuantifiedPSMInterface> psmsOfSeq = psmsBySequenceAndCharge.get(seq);
-
-			final List<String> accs = getAccToPrint(psmsOfSeq);
-			final String acc = StringUtils.getSortedSeparatedValueStringFromChars(accs, ",");
-
-			validProteins.add(acc);
-
-			final int charge = getChargeToPrint(psmsOfSeq);
-			final Map<QuantificationLabel, Double> intensities = getIntensitiesToPrint(psmsOfSeq, this.psmSelection,
-					this.useRawIntensity);
-			final QuantifiedPSMInterface firstPSM = psmsOfSeq.get(0);
-			final String peptideSequence = firstPSM.getBeforeSeq() + "." + firstPSM.getSequence() + "."
-					+ firstPSM.getAfterSeq();
-			final String psm = peptideSequence + "_" + charge;
-			final String run = firstPSM.getMSRun().getRunId();
-			for (final QuantificationLabel label : intensities.keySet().stream().sorted()
-					.collect(Collectors.toList())) {
-				printOutputLine(fw, label, intensities.get(label), acc, charge, peptideSequence, psm, run);
-			}
-
-		}
-		System.out.print("\n*******\nValid data: " + psms.size() + " PSMs");
-		System.out.print(", " + psmsBySequenceAndCharge.size() + " peptides (sequences+charge)");
-		System.out.println(", " + validProteins.size() + " proteins\n*******");
-		fw.close();
-		log.info("File written at " + outputFile.getAbsolutePath());
-		System.out.println("File ready at " + outputFile.getAbsolutePath());
 	}
 
 	private void printHeader(FileWriter fw) throws IOException {
@@ -220,7 +229,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 	}
 
 	private Map<QuantificationLabel, Double> getIntensitiesToPrint(List<QuantifiedPSMInterface> psms,
-			PSMSelectionType psmSelection, boolean useRawIntensity) {
+			PSMSelectionType psmSelection, boolean useRawIntensity) throws IOException {
 
 		switch (psmSelection) {
 		case HIGHEST:
@@ -236,7 +245,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 	}
 
 	private Map<QuantificationLabel, Double> getHighestIntensitiesToPrint(List<QuantifiedPSMInterface> psms,
-			boolean useRawIntensity) {
+			boolean useRawIntensity) throws IOException {
 		QuantifiedPSMInterface highestPSM = null;
 		double highestSum = -Double.MAX_VALUE;
 		for (final QuantifiedPSMInterface psm : psms) {
@@ -254,8 +263,8 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 		return getIntensitiesFromPSM(highestPSM, useRawIntensity);
 	}
 
-	private Map<QuantificationLabel, Double> getIntensitiesFromPSM(QuantifiedPSMInterface psm,
-			boolean useRawIntensity) {
+	private Map<QuantificationLabel, Double> getIntensitiesFromPSM(QuantifiedPSMInterface psm, boolean useRawIntensity)
+			throws IOException {
 		final Map<QuantificationLabel, Double> ret = new EnumMap<QuantificationLabel, Double>(
 				QuantificationLabel.class);
 		final Set<Amount> amounts = psm.getAmounts();
@@ -269,8 +278,8 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 				final String name = amount.getCondition().getName();
 				final String[] split = name.split(ExperimentalDesign.SYMBOL);
 				final String conditionName = split[0];
-				final double channel = Double.valueOf(split[1]);
-				final QuantificationLabel label = ExperimentalDesign.getTMT6LabelFromChannel(channel);
+				final float channel = Float.valueOf(split[1]);
+				final QuantificationLabel label = getExperimentalDesign().getLabelFromChannel(channel);
 				ret.put(label, amount.getValue());
 			}
 		}
@@ -278,7 +287,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 	}
 
 	private Map<QuantificationLabel, Double> getAveragedIntensitiesToPrint(List<QuantifiedPSMInterface> psms,
-			boolean useRawIntensity) {
+			boolean useRawIntensity) throws IOException {
 		final Map<QuantificationLabel, TDoubleList> toAverage = new EnumMap<QuantificationLabel, TDoubleList>(
 				QuantificationLabel.class);
 		for (final QuantifiedPSMInterface psm : psms) {
@@ -293,8 +302,8 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 					final String name = amount.getCondition().getName();
 					final String[] split = name.split(ExperimentalDesign.SYMBOL);
 					final String conditionName = split[0];
-					final double channel = Double.valueOf(split[1]);
-					final QuantificationLabel label = ExperimentalDesign.getTMT6LabelFromChannel(channel);
+					final float channel = Float.valueOf(split[1]);
+					final QuantificationLabel label = getExperimentalDesign().getLabelFromChannel(channel);
 					// for the average, don't use the zero
 					if (Double.compare(0.0, amount.getValue()) == 0) {
 						continue;
@@ -316,7 +325,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 	}
 
 	private Map<QuantificationLabel, Double> getSummedIntensitiesToPrint(List<QuantifiedPSMInterface> psms,
-			boolean useRawIntensity) {
+			boolean useRawIntensity) throws IOException {
 		final Map<QuantificationLabel, Double> ret = new EnumMap<QuantificationLabel, Double>(
 				QuantificationLabel.class);
 		for (final QuantifiedPSMInterface psm : psms) {
@@ -331,8 +340,8 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 					final String name = amount.getCondition().getName();
 					final String[] split = name.split(ExperimentalDesign.SYMBOL);
 //					final String conditionName = split[0];
-					final double channel = Double.valueOf(split[1]);
-					final QuantificationLabel label = ExperimentalDesign.getTMT6LabelFromChannel(channel);
+					final float channel = Float.valueOf(split[1]);
+					final QuantificationLabel label = getExperimentalDesign().getLabelFromChannel(channel);
 					if (!ret.containsKey(label)) {
 						ret.put(label, amount.getValue());
 					} else {
@@ -374,16 +383,14 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 	private void printOutputLine(FileWriter fw, QuantificationLabel label, double intensity, String acc, int charge,
 			String peptideSequence, String psm, String run) throws IOException {
 		final ExperimentalDesign experimentalDesign = getExperimentalDesign();
-		final double channel = Double.valueOf(ExperimentalDesign.getChannelByLabel(label));
+		final float channel = experimentalDesign.getChannelByLabel(label);
 		final QuantCondition condition = experimentalDesign.getConditionByLabel().get(label);
 		final String conditionName = condition.getName().split(ExperimentalDesign.SYMBOL)[0];
 		final String mixture = experimentalDesign.getMixtureByRun(run);
 		final String techRepMixture = experimentalDesign.getTechRepMixtureByRun(run);
 		final String bioReplicate = experimentalDesign.getBioReplicate(channel, techRepMixture, mixture);
-		String channelString = Double.valueOf(channel).toString();
-		if (experimentalDesign.isTMT6Plex()) {
-			channelString = String.valueOf(Double.valueOf(channel).intValue());
-		}
+		final String channelString = Float.valueOf(channel).toString();
+
 		fw.write(acc + "\t" + peptideSequence + "\t" + charge + "\t" + psm + "\t" + mixture + "\t" + techRepMixture
 				+ "\t" + run + "\t" + channelString + "\t" + conditionName + "\t" + bioReplicate + "\t" + intensity
 				+ "\n");

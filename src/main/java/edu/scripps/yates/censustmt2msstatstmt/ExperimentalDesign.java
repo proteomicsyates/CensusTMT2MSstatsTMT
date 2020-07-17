@@ -8,13 +8,13 @@ import java.util.Map;
 
 import edu.scripps.yates.census.analysis.QuantCondition;
 import edu.scripps.yates.census.read.util.QuantificationLabel;
-import gnu.trove.list.TDoubleList;
-import gnu.trove.list.array.TDoubleArrayList;
+import gnu.trove.list.TFloatList;
+import gnu.trove.list.array.TFloatArrayList;
 import gnu.trove.map.TObjectIntMap;
 import gnu.trove.map.hash.THashMap;
 import gnu.trove.map.hash.TObjectIntHashMap;
-import gnu.trove.set.TDoubleSet;
-import gnu.trove.set.hash.TDoubleHashSet;
+import gnu.trove.set.TFloatSet;
+import gnu.trove.set.hash.TFloatHashSet;
 
 public class ExperimentalDesign {
 
@@ -27,41 +27,53 @@ public class ExperimentalDesign {
 	private static final String BIO_REPLICATE = "BioReplicate";
 	static final String SYMBOL = "@@@@";
 	private final String separator;
-	private final Map<String, TDoubleList> channelsByConditions = new THashMap<String, TDoubleList>();
-	private final TDoubleSet totalChannels = new TDoubleHashSet();
+	private final Map<String, TFloatList> channelsByConditions = new THashMap<String, TFloatList>();
+	private final TFloatSet totalChannels = new TFloatHashSet();
 	private final Map<String, String> mixtureByRun = new THashMap<String, String>();
 	private final Map<String, String> techRepMixtureByRun = new THashMap<String, String>();
 	private final Map<String, String> bioReplicateByChannelTechRepMixtureAndMixture = new THashMap<String, String>();
 	private final Map<String, QuantCondition> conditionsByName = new THashMap<String, QuantCondition>();
+	private final Map<QuantificationLabel, Float> channelsByLabel = new THashMap<QuantificationLabel, Float>();
 
 	public ExperimentalDesign(File experimentalDesignFile, String separator) throws IOException {
-		this.separator = separator;
-		final List<String> lines = Files.readAllLines(experimentalDesignFile.toPath());
-		final String header = lines.get(0);
-		final TObjectIntMap<String> indexByHeader = getIndexesByHeaders(header);
-		for (int numLine = 1; numLine < lines.size(); numLine++) {
-			final String line = lines.get(numLine);
-			final String[] split = line.split(separator);
-			final String run = split[indexByHeader.get(RUN)];
-			final String fraction = split[indexByHeader.get(FRACTION)];
-			final String techRepMixture = split[indexByHeader.get(TECH_REP_MIXTURE)];
-			final double channel = Double.valueOf(split[indexByHeader.get(CHANNEL)]);
-			final String condition = split[indexByHeader.get(CONDITION)] + SYMBOL + channel;
-			final String mixture = split[indexByHeader.get(MIXTURE)];
-			final String bioReplicate = split[indexByHeader.get(BIO_REPLICATE)];
-			//
-			TDoubleList channels = null;
-			if (channelsByConditions.containsKey(condition)) {
-				channels = channelsByConditions.get(condition);
-			} else {
-				channels = new TDoubleArrayList();
+		try {
+			this.separator = separator;
+			final List<String> lines = Files.readAllLines(experimentalDesignFile.toPath());
+			final String header = lines.get(0);
+			final TObjectIntMap<String> indexByHeader = getIndexesByHeaders(header);
+			for (int numLine = 1; numLine < lines.size(); numLine++) {
+				final String line = lines.get(numLine).trim();
+				if ("".equals(line)) {
+					continue;
+				}
+				final String[] split = line.split(separator);
+				final String run = split[indexByHeader.get(RUN)];
+				final String fraction = split[indexByHeader.get(FRACTION)];
+				final String techRepMixture = split[indexByHeader.get(TECH_REP_MIXTURE)];
+				final float channel = Float.valueOf(split[indexByHeader.get(CHANNEL)]);
+				final String condition = split[indexByHeader.get(CONDITION)] + SYMBOL + channel;
+				final String mixture = split[indexByHeader.get(MIXTURE)];
+				final String bioReplicate = split[indexByHeader.get(BIO_REPLICATE)];
+				//
+				TFloatList channels = null;
+				if (channelsByConditions.containsKey(condition)) {
+					channels = channelsByConditions.get(condition);
+				} else {
+					channels = new TFloatArrayList();
+				}
+				channels.add(channel);
+				totalChannels.add(channel);
+				channelsByConditions.put(condition, channels);
+				mixtureByRun.put(run, mixture);
+				techRepMixtureByRun.put(run, techRepMixture);
+				bioReplicateByChannelTechRepMixtureAndMixture.put(channel + techRepMixture + mixture, bioReplicate);
 			}
-			channels.add(channel);
-			totalChannels.add(channel);
-			channelsByConditions.put(condition, channels);
-			mixtureByRun.put(run, mixture);
-			techRepMixtureByRun.put(run, techRepMixture);
-			bioReplicateByChannelTechRepMixtureAndMixture.put(channel + techRepMixture + mixture, bioReplicate);
+		} catch (final Exception e) {
+			if (e instanceof IOException) {
+				throw e;
+			}
+			throw new IllegalArgumentException(
+					"Error reading experimental design from the annotation file: " + e.getMessage());
 		}
 	}
 
@@ -83,8 +95,8 @@ public class ExperimentalDesign {
 			} else {
 				quantCondition = new QuantCondition(condition);
 			}
-			final TDoubleList channels = channelsByConditions.get(condition);
-			for (final double channel : channels.toArray()) {
+			final TFloatList channels = channelsByConditions.get(condition);
+			for (final float channel : channels.toArray()) {
 				final QuantificationLabel label = getLabelFromChannel(channel);
 				ret.put(label, quantCondition);
 			}
@@ -92,9 +104,11 @@ public class ExperimentalDesign {
 		return ret;
 	}
 
-	private QuantificationLabel getLabelFromChannel(double channel) {
+	public QuantificationLabel getLabelFromChannel(float channel) {
 		if (isTMT11Plex()) {
 			return getTMT11LabelFromChannel(channel);
+		} else if (isTMT10Plex()) {
+			return getTMT10LabelFromChannel(channel);
 		} else if (isTMT6Plex()) {
 			return getTMT6LabelFromChannel(channel);
 		} else {
@@ -103,51 +117,61 @@ public class ExperimentalDesign {
 		}
 	}
 
-	public static QuantificationLabel getTMT6LabelFromChannel(double channel) {
-		if (Double.compare(channel, 126.0) == 0) {
-			return QuantificationLabel.TMT_6PLEX_126;
+	private QuantificationLabel getTMT6LabelFromChannel(float channel) {
+		final TFloatList sortedChannels = new TFloatArrayList();
+		sortedChannels.addAll(this.totalChannels);
+		sortedChannels.sort();
+		//
+		final List<QuantificationLabel> tmt6PlexLabels = QuantificationLabel.getTMT6PlexLabels();
+		for (int i = 0; i < tmt6PlexLabels.size(); i++) {
+			if (Float.compare(sortedChannels.get(i), channel) == 0) {
+				final QuantificationLabel quantificationLabel = tmt6PlexLabels.get(i);
+				channelsByLabel.put(quantificationLabel, channel);
+				return quantificationLabel;
+			}
 		}
-		if (Double.compare(channel, 127.0) == 0) {
-			return QuantificationLabel.TMT_6PLEX_127;
-		}
-		if (Double.compare(channel, 128.0) == 0) {
-			return QuantificationLabel.TMT_6PLEX_128;
-		}
-		if (Double.compare(channel, 129.0) == 0) {
-			return QuantificationLabel.TMT_6PLEX_129;
-		}
-		if (Double.compare(channel, 130.0) == 0) {
-			return QuantificationLabel.TMT_6PLEX_130;
-		}
-		if (Double.compare(channel, 131.0) == 0) {
-			return QuantificationLabel.TMT_6PLEX_131;
-		}
+
 		throw new IllegalArgumentException("Channel " + channel + " not recognized for TMT6plex");
 	}
 
-	public static QuantificationLabel getTMT11LabelFromChannel(double channel) {
-		throw new IllegalArgumentException("TMT11 not yet supported");
+	private QuantificationLabel getTMT10LabelFromChannel(float channel) {
+		final TFloatList sortedChannels = new TFloatArrayList();
+		sortedChannels.addAll(this.totalChannels);
+		sortedChannels.sort();
+		//
+		final List<QuantificationLabel> tmt10PlexLabels = QuantificationLabel.getTMT10PlexLabels();
+		for (int i = 0; i < tmt10PlexLabels.size(); i++) {
+			final float channel2 = sortedChannels.get(i);
+			if (Float.compare(channel2, channel) == 0) {
+				final QuantificationLabel quantificationLabel = tmt10PlexLabels.get(i);
+				channelsByLabel.put(quantificationLabel, channel);
+				return quantificationLabel;
+			}
+		}
 
+		throw new IllegalArgumentException("Channel " + channel + " not recognized for TMT6plex");
 	}
 
-	public static double getChannelByLabel(QuantificationLabel label) {
-		if (label == QuantificationLabel.TMT_6PLEX_126) {
-			return 126.0;
+	private QuantificationLabel getTMT11LabelFromChannel(float channel) {
+		final TFloatList sortedChannels = new TFloatArrayList();
+		sortedChannels.addAll(this.totalChannels);
+		sortedChannels.sort();
+		//
+		final List<QuantificationLabel> tmt11PlexLabels = QuantificationLabel.getTMT11PlexLabels();
+		for (int i = 0; i < tmt11PlexLabels.size(); i++) {
+			if (Float.compare(sortedChannels.get(i), channel) == 0) {
+				final QuantificationLabel quantificationLabel = tmt11PlexLabels.get(i);
+				channelsByLabel.put(quantificationLabel, channel);
+				return quantificationLabel;
+			}
 		}
-		if (label == QuantificationLabel.TMT_6PLEX_127) {
-			return 127.0;
-		}
-		if (label == QuantificationLabel.TMT_6PLEX_128) {
-			return 128.0;
-		}
-		if (label == QuantificationLabel.TMT_6PLEX_129) {
-			return 129.0;
-		}
-		if (label == QuantificationLabel.TMT_6PLEX_130) {
-			return 130.0;
-		}
-		if (label == QuantificationLabel.TMT_6PLEX_131) {
-			return 131.0;
+
+		throw new IllegalArgumentException("Channel " + channel + " not recognized for TMT6plex");
+	}
+
+	public float getChannelByLabel(QuantificationLabel label) {
+		if (channelsByLabel.containsKey(label)) {
+			return channelsByLabel.get(label);
 		}
 		throw new IllegalArgumentException(label + " not supported yet.");
 	}
@@ -164,11 +188,15 @@ public class ExperimentalDesign {
 		return bioReplicateByChannelTechRepMixtureAndMixture.get(channel + techRepMixture + mixture);
 	}
 
-	public boolean isTMT6Plex() {
+	private boolean isTMT6Plex() {
 		return totalChannels.size() == 6;
 	}
 
-	public boolean isTMT11Plex() {
+	private boolean isTMT10Plex() {
+		return totalChannels.size() == 10;
+	}
+
+	private boolean isTMT11Plex() {
 		return totalChannels.size() == 11;
 	}
 
