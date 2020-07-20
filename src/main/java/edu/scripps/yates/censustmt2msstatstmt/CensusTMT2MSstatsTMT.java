@@ -16,6 +16,7 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.log4j.Logger;
+import org.apache.tools.ant.DirectoryScanner;
 import org.springframework.core.io.ClassPathResource;
 
 import edu.scripps.yates.census.analysis.QuantCondition;
@@ -42,8 +43,9 @@ import gnu.trove.set.hash.THashSet;
 
 public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 	private final static Logger log = Logger.getLogger(CensusTMT2MSstatsTMT.class);
+	private static final String SUFFIX = "_msstatsTMT.txt";
 	private static AppVersion version;
-	private File inputFile;
+	private List<File> inputFiles = new ArrayList<File>();
 	private boolean uniquePeptides;
 	private boolean useRawIntensity;
 	private PSMSelectionType psmSelection;
@@ -84,19 +86,37 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 		}
 	}
 
+	private String getInputFileNamesString() {
+		final StringBuilder sb = new StringBuilder();
+		for (final File file : inputFiles) {
+			if (!"".equals(sb.toString())) {
+				sb.append(", ");
+			}
+			sb.append(FilenameUtils.getName(file.getAbsolutePath()));
+
+		}
+		return sb.toString();
+	}
+
 	private void runConversion() throws Exception {
+		FileWriter fw = null;
 		try {
 			ed = null;
-			System.out.println("Starting conversion of file " + inputFile.getAbsolutePath());
+			System.out.println("Starting conversion of file " + getInputFileNamesString());
 			final File outputFile = getOutputFile();
-			final FileWriter fw = new FileWriter(outputFile);
+			fw = new FileWriter(outputFile);
 			System.out.println("Output file: " + outputFile.getAbsolutePath());
 			// header
 			printHeader(fw);
-			final Map<QuantificationLabel, QuantCondition> conditionsByLabels = getExperimentalDesign()
-					.getConditionByLabel();
-			System.out.println("Reading input file...");
-			final CensusOutParser parser = new CensusOutParser(this.inputFile, conditionsByLabels);
+			final Map<QuantCondition, QuantificationLabel> labelsByCondition = getExperimentalDesign()
+					.getLabelsByCondition();
+			String plural = "";
+			if (this.inputFiles.size() > 1) {
+				plural = "s";
+			}
+			System.out.println("Reading input file" + plural + "...");
+			final CensusOutParser parser = new CensusOutParser(this.inputFiles.toArray(new File[0]), labelsByCondition,
+					null, null);
 			if (parser.isTMT10().values().iterator().next()) {
 				System.out.println("TMT 10-Plex detected.");
 			} else if (parser.isTMT6().values().iterator().next()) {
@@ -216,7 +236,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			System.out.println("Valid data: " + psms.size() + " PSMs");
 			System.out.println(psmsBySequenceAndCharge.size() + " peptides (sequences+charge)");
 			System.out.println(validProteins.size() + " proteins\n*******");
-			fw.close();
+
 			log.info("File written at " + outputFile.getAbsolutePath());
 			System.out.println("File ready at " + outputFile.getAbsolutePath());
 		} catch (final Exception e) {
@@ -226,6 +246,10 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 								+ e.getMessage());
 			} else {
 				throw e;
+			}
+		} finally {
+			if (fw != null) {
+				fw.close();
 			}
 		}
 	}
@@ -392,7 +416,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			String peptideSequence, String psm, String run) throws IOException {
 		final ExperimentalDesign experimentalDesign = getExperimentalDesign();
 		final Float channel = experimentalDesign.getChannelByLabel(label);
-		final QuantCondition condition = experimentalDesign.getConditionByLabel().get(label);
+		final QuantCondition condition = experimentalDesign.getConditionsByLabel().get(label);
 		final String conditionName = condition.getName().split(ExperimentalDesign.SYMBOL)[0];
 		final String mixture = experimentalDesign.getMixtureByRun(run);
 		final String techRepMixture = experimentalDesign.getTechRepMixtureByRun(run);
@@ -406,8 +430,8 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 	}
 
 	private File getOutputFile() {
-		return new File(this.inputFile.getParent() + File.separator
-				+ FilenameUtils.getBaseName(this.inputFile.getAbsolutePath()) + "_msstatsTMT.txt");
+		return new File(this.inputFiles.get(0).getParent() + File.separator
+				+ FilenameUtils.getBaseName(this.inputFiles.get(0).getAbsolutePath()) + SUFFIX);
 	}
 
 	private ExperimentalDesign getExperimentalDesign() throws IOException {
@@ -443,7 +467,8 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 		final List<Option> options = new ArrayList<Option>();
 
 		// add t option
-		final Option option1 = new Option("i", "input", true, "Path to the input file.");
+		final Option option1 = new Option("i", "input", true,
+				"Path to the input file(s). It can refer to multiple files by using wildcard '*', i.e: '/path/to/my/files/census*.out'");
 		option1.setRequired(true);
 		options.add(option1);
 		final Option option2 = new Option("an", "annotation", true, "Path to the experimental design file.");
@@ -491,20 +516,41 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 		boolean useRawIntensity = false;
 		String decoyPrefix = null;
 		PSMSelectionType psmSelection = PSMSelectionType.HIGHEST;
-
 		if (cmd.hasOption("i")) {
+			this.inputFiles = new ArrayList<File>();
 			final String iOptionValue = cmd.getOptionValue("i");
 			inputFile = new File(iOptionValue);
 			final File parentFile = inputFile.getParentFile();
-			if (parentFile == null || !inputFile.exists()) {
+			if (parentFile == null && !inputFile.exists()) {
 				inputFile = new File(System.getProperty("user.dir") + File.separator + iOptionValue);
 			}
 
 			if (!inputFile.exists()) {
-				errorInParameters("Input file '-i " + iOptionValue + "' doesn't exist or is not found");
+				// check whether is using a wildcard in the name
+				if (iOptionValue.matches(".*\\*.*")) {
+					final List<File> inputFiles = getMultipleFiles(parentFile, iOptionValue);
+					if (inputFiles.isEmpty()) {
+						errorInParameters("Input files '-i " + iOptionValue + "' don't exist or are not found");
+					} else {
+						this.inputFiles.addAll(inputFiles);
+					}
+				} else {
+					errorInParameters("Input file '-i " + iOptionValue + "' doesn't exist or is not found");
+				}
+			} else {
+				inputFiles.add(inputFile);
 			}
 		} else {
 			errorInParameters("Input file is missing");
+		}
+		String plural = "";
+		if (this.inputFiles.size() > 1) {
+			plural += "s";
+		}
+		System.out.println("Input file" + plural + ":");
+		int i = 1;
+		for (final File file : inputFiles) {
+			System.out.println(i++ + "'" + file.getAbsolutePath() + "'");
 		}
 		if (cmd.hasOption("an")) {
 			final String anOptionValue = cmd.getOptionValue("an");
@@ -558,7 +604,6 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			minNumPeptides = Integer.valueOf(cmd.getOptionValue("m"));
 		}
 		log.info("Using d option for decoy prefix='" + decoyPrefix + "'");
-		this.inputFile = inputFile;
 		this.experimentalDesignFile = experimentalDesignFile;
 		this.experimentalDesignSeparator = experimentalDesignSeparator;
 		this.uniquePeptides = uniquePeptides;
@@ -566,6 +611,26 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 		this.decoyPrefix = decoyPrefix;
 		this.psmSelection = psmSelection;
 		this.minNumPeptides = minNumPeptides;
+	}
+
+	private List<File> getMultipleFiles(File parentFolder, String iOptionValue) {
+		final DirectoryScanner scanner = new DirectoryScanner();
+		final String[] includes = new String[] { FilenameUtils.getName(iOptionValue) };
+		scanner.setIncludes(includes);
+		scanner.setBasedir(parentFolder);
+		scanner.setCaseSensitive(false);
+		scanner.scan();
+		final String[] files = scanner.getIncludedFiles();
+		final List<File> ret = new ArrayList<File>();
+		for (final String fileFullPath : files) {
+			if (FilenameUtils.getName(fileFullPath).endsWith(SUFFIX)) {
+				System.out.println("Ignoring file matching -i parameter: '" + fileFullPath + "'");
+				continue;
+			}
+			ret.add(new File(parentFolder.getAbsolutePath() + File.separator + fileFullPath));
+
+		}
+		return ret;
 	}
 
 	@Override

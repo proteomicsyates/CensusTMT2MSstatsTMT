@@ -92,7 +92,7 @@ public class ExperimentalDesign {
 		return ret;
 	}
 
-	public Map<QuantificationLabel, QuantCondition> getConditionByLabel() {
+	public Map<QuantificationLabel, QuantCondition> getConditionsByLabel() {
 		final Map<QuantificationLabel, QuantCondition> ret = new THashMap<QuantificationLabel, QuantCondition>();
 		for (final String condition : this.channelsByConditions.keySet()) {
 			QuantCondition quantCondition = null;
@@ -105,6 +105,24 @@ public class ExperimentalDesign {
 			for (final float channel : channels.toArray()) {
 				final QuantificationLabel label = getLabelFromChannel(channel);
 				ret.put(label, quantCondition);
+			}
+		}
+		return ret;
+	}
+
+	public Map<QuantCondition, QuantificationLabel> getLabelsByCondition() {
+		final Map<QuantCondition, QuantificationLabel> ret = new THashMap<QuantCondition, QuantificationLabel>();
+		for (final String condition : this.channelsByConditions.keySet()) {
+			QuantCondition quantCondition = null;
+			if (conditionsByName.containsKey(condition)) {
+				quantCondition = conditionsByName.get(condition);
+			} else {
+				quantCondition = new QuantCondition(condition);
+			}
+			final TFloatList channels = channelsByConditions.get(condition);
+			for (final float channel : channels.toArray()) {
+				final QuantificationLabel label = getLabelFromChannel(channel);
+				ret.put(quantCondition, label);
 			}
 		}
 		return ret;
