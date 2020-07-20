@@ -97,6 +97,13 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 					.getConditionByLabel();
 			System.out.println("Reading input file...");
 			final CensusOutParser parser = new CensusOutParser(this.inputFile, conditionsByLabels);
+			if (parser.isTMT10().values().iterator().next()) {
+				System.out.println("TMT 10-Plex detected.");
+			} else if (parser.isTMT6().values().iterator().next()) {
+				System.out.println("TMT 6-Plex detected.");
+			} else if (parser.isTMT11().values().iterator().next()) {
+				System.out.println("TMT 11-Plex detected.");
+			}
 			final List<QuantifiedPSMInterface> psms = new ArrayList<QuantifiedPSMInterface>();
 			psms.addAll(parser.getPSMMap().values());
 			System.out.println(psms.size() + " PSMs read from input file.");
@@ -120,9 +127,9 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 						}
 					}
 				}
-				System.out.print("\n-" + discardedProteins.size() + " proteins discarded as DECOYs.");
-				System.out.println(" Now working with " + psms.size() + " PSMs (" + (initialPSMs - psms.size())
-						+ " discarded).\n");
+				System.out.println(discardedProteins.size() + " proteins discarded as DECOYs.");
+				System.out.println(
+						"Now working with " + psms.size() + " PSMs (" + (initialPSMs - psms.size()) + " discarded).");
 			}
 			if (minNumPeptides > 1 || uniquePeptides) {
 				int psmsDiscardedByUniqueness = 0;
@@ -157,10 +164,10 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 						psmsIterator.remove();
 					}
 				}
-				System.out.print("\n " + discardedProteins.size() + " proteins discarded for not having at least "
+				System.out.println(discardedProteins.size() + " proteins discarded for not having at least "
 						+ minNumPeptides + " peptides (sequence+charge).");
 				if (uniquePeptides) {
-					System.out.print(" " + psmsDiscardedByUniqueness + " PSMs discarded because they are not unique.");
+					System.out.println(psmsDiscardedByUniqueness + " PSMs discarded because they are not unique.");
 				}
 				System.out.println(
 						" Now working with " + psms.size() + " PSMs (" + (initialPSMs - psms.size()) + " discarded).");
@@ -205,9 +212,10 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 				}
 
 			}
-			System.out.print("\n*******\nValid data: " + psms.size() + " PSMs");
-			System.out.print(", " + psmsBySequenceAndCharge.size() + " peptides (sequences+charge)");
-			System.out.println(", " + validProteins.size() + " proteins\n*******");
+			System.out.println("\n*******");
+			System.out.println("Valid data: " + psms.size() + " PSMs");
+			System.out.println(psmsBySequenceAndCharge.size() + " peptides (sequences+charge)");
+			System.out.println(validProteins.size() + " proteins\n*******");
 			fw.close();
 			log.info("File written at " + outputFile.getAbsolutePath());
 			System.out.println("File ready at " + outputFile.getAbsolutePath());

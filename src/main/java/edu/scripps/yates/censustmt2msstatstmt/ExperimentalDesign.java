@@ -2,12 +2,12 @@ package edu.scripps.yates.censustmt2msstatstmt;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.List;
 import java.util.Map;
 
 import edu.scripps.yates.census.analysis.QuantCondition;
 import edu.scripps.yates.census.read.util.QuantificationLabel;
+import edu.scripps.yates.utilities.files.FileUtils;
 import gnu.trove.list.TFloatList;
 import gnu.trove.list.array.TFloatArrayList;
 import gnu.trove.map.TObjectIntMap;
@@ -38,7 +38,7 @@ public class ExperimentalDesign {
 	public ExperimentalDesign(File experimentalDesignFile, String separator) throws IOException {
 		try {
 			this.separator = separator;
-			final List<String> lines = Files.readAllLines(experimentalDesignFile.toPath());
+			final List<String> lines = FileUtils.readAllLines(experimentalDesignFile.toPath());
 			final String header = lines.get(0);
 			final TObjectIntMap<String> indexByHeader = getIndexesByHeaders(header);
 			for (int numLine = 1; numLine < lines.size(); numLine++) {
@@ -50,7 +50,14 @@ public class ExperimentalDesign {
 				final String run = split[indexByHeader.get(RUN)];
 				final String fraction = split[indexByHeader.get(FRACTION)];
 				final String techRepMixture = split[indexByHeader.get(TECH_REP_MIXTURE)];
-				final float channel = Float.valueOf(split[indexByHeader.get(CHANNEL)]);
+				float channel = Float.NaN;
+				try {
+					channel = Float.valueOf(split[indexByHeader.get(CHANNEL)]);
+				} catch (final NumberFormatException e) {
+					throw new IllegalArgumentException(
+							"Error reading experimental design. Channel has to be a number.\n"
+									+ "The program will parse the numbers and will order them in ascending order. Then, depending on how many different channel numbers has, it will assume the PLEX of the TMT. That will have to match with the TMT-Plex of the input file.");
+				}
 				final String condition = split[indexByHeader.get(CONDITION)] + SYMBOL + channel;
 				final String mixture = split[indexByHeader.get(MIXTURE)];
 				final String bioReplicate = split[indexByHeader.get(BIO_REPLICATE)];
