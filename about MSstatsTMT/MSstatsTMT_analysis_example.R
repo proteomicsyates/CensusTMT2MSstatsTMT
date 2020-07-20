@@ -15,6 +15,7 @@ library(MSstatsTMT)
 library(tidyr)
 library(dplyr)
 
+# here you will read the file you converted, in this case called census-out-21063-NM_msstatsTMT.txt
 input <-  read.table("census-out-21063-NM_msstatsTMT.txt", sep = "\t", header = TRUE)
 
 ## 3.4 Preliminary check
