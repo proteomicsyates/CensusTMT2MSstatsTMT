@@ -63,3 +63,6 @@ The file should have the following columns:
 | 130.14 | 130.141145 |
 | 131 | 131.13818 |
 
+Here you have a couple of examples of annotation files:  
+[annotation file example 1](https://raw.githubusercontent.com/proteomicsyates/CensusTMT2MSstatsTMT/master/about%20MSstatsTMT/Annotation_valid_example1.csv)  
+[annotation file example 2](https://raw.githubusercontent.com/proteomicsyates/CensusTMT2MSstatsTMT/master/about%20MSstatsTMT/Annotation_valid_example2.csv)
