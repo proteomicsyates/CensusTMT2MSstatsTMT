@@ -39,7 +39,7 @@
         <fileSet>
             <directory>about MSstatsTMT</directory>
             <includes>
-                <include>*</include> 
+                <include>*.*</include> 
             </includes>
             <outputDirectory>${assembly.output.folder}/about MSstatsTMT</outputDirectory>
         </fileSet>
