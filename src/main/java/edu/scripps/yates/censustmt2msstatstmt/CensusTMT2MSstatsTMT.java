@@ -286,7 +286,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 				final String name = amount.getCondition().getName();
 				final String[] split = name.split(ExperimentalDesign.SYMBOL);
 				final String conditionName = split[0];
-				final float channel = Float.valueOf(split[1]);
+				final Float channel = Float.valueOf(split[1].trim());
 				final QuantificationLabel label = getExperimentalDesign().getLabelFromChannel(channel);
 				ret.put(label, amount.getValue());
 			}
@@ -310,7 +310,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 					final String name = amount.getCondition().getName();
 					final String[] split = name.split(ExperimentalDesign.SYMBOL);
 					final String conditionName = split[0];
-					final float channel = Float.valueOf(split[1]);
+					final Float channel = Float.valueOf(split[1].trim());
 					final QuantificationLabel label = getExperimentalDesign().getLabelFromChannel(channel);
 					// for the average, don't use the zero
 					if (Double.compare(0.0, amount.getValue()) == 0) {
@@ -348,7 +348,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 					final String name = amount.getCondition().getName();
 					final String[] split = name.split(ExperimentalDesign.SYMBOL);
 //					final String conditionName = split[0];
-					final float channel = Float.valueOf(split[1]);
+					final Float channel = Float.valueOf(split[1].trim());
 					final QuantificationLabel label = getExperimentalDesign().getLabelFromChannel(channel);
 					if (!ret.containsKey(label)) {
 						ret.put(label, amount.getValue());
@@ -391,7 +391,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 	private void printOutputLine(FileWriter fw, QuantificationLabel label, double intensity, String acc, int charge,
 			String peptideSequence, String psm, String run) throws IOException {
 		final ExperimentalDesign experimentalDesign = getExperimentalDesign();
-		final float channel = experimentalDesign.getChannelByLabel(label);
+		final Float channel = experimentalDesign.getChannelByLabel(label);
 		final QuantCondition condition = experimentalDesign.getConditionByLabel().get(label);
 		final String conditionName = condition.getName().split(ExperimentalDesign.SYMBOL)[0];
 		final String mixture = experimentalDesign.getMixtureByRun(run);

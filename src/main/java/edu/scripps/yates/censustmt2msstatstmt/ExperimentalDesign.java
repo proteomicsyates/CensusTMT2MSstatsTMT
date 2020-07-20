@@ -50,13 +50,12 @@ public class ExperimentalDesign {
 				final String run = split[indexByHeader.get(RUN)];
 				final String fraction = split[indexByHeader.get(FRACTION)];
 				final String techRepMixture = split[indexByHeader.get(TECH_REP_MIXTURE)];
-				float channel = Float.NaN;
+				Float channel = Float.NaN;
 				try {
-					channel = Float.valueOf(split[indexByHeader.get(CHANNEL)]);
+					channel = Float.valueOf(split[indexByHeader.get(CHANNEL)].trim());
 				} catch (final NumberFormatException e) {
-					throw new IllegalArgumentException(
-							"Error reading experimental design. Channel has to be a number.\n"
-									+ "The program will parse the numbers and will order them in ascending order. Then, depending on how many different channel numbers has, it will assume the PLEX of the TMT. That will have to match with the TMT-Plex of the input file.");
+					throw new Exception("Channel '" + split[indexByHeader.get(CHANNEL)]
+							+ "' is not supported. Only numbers are allowed.");
 				}
 				final String condition = split[indexByHeader.get(CONDITION)] + SYMBOL + channel;
 				final String mixture = split[indexByHeader.get(MIXTURE)];
@@ -77,7 +76,7 @@ public class ExperimentalDesign {
 			}
 		} catch (final Exception e) {
 			if (e instanceof IOException) {
-				throw e;
+				throw (IOException) e;
 			}
 			throw new IllegalArgumentException(
 					"Error reading experimental design from the annotation file: " + e.getMessage());
@@ -148,8 +147,8 @@ public class ExperimentalDesign {
 		//
 		final List<QuantificationLabel> tmt10PlexLabels = QuantificationLabel.getTMT10PlexLabels();
 		for (int i = 0; i < tmt10PlexLabels.size(); i++) {
-			final float channel2 = sortedChannels.get(i);
-			if (Float.compare(channel2, channel) == 0) {
+
+			if (Float.compare(sortedChannels.get(i), channel) == 0) {
 				final QuantificationLabel quantificationLabel = tmt10PlexLabels.get(i);
 				channelsByLabel.put(quantificationLabel, channel);
 				return quantificationLabel;
@@ -176,7 +175,7 @@ public class ExperimentalDesign {
 		throw new IllegalArgumentException("Channel " + channel + " not recognized for TMT6plex");
 	}
 
-	public float getChannelByLabel(QuantificationLabel label) {
+	public Float getChannelByLabel(QuantificationLabel label) {
 		if (channelsByLabel.containsKey(label)) {
 			return channelsByLabel.get(label);
 		}
@@ -191,7 +190,7 @@ public class ExperimentalDesign {
 		return techRepMixtureByRun.get(run);
 	}
 
-	public String getBioReplicate(double channel, String techRepMixture, String mixture) {
+	public String getBioReplicate(float channel, String techRepMixture, String mixture) {
 		return bioReplicateByChannelTechRepMixtureAndMixture.get(channel + techRepMixture + mixture);
 	}
 
