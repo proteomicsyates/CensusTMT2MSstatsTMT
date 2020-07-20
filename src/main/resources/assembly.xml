@@ -36,6 +36,13 @@
             </includes>
             <outputDirectory>${assembly.output.folder}</outputDirectory>
         </fileSet>
+        <fileSet>
+            <directory>about MSstatsTMT</directory>
+            <includes>
+                <include>*</include> 
+            </includes>
+            <outputDirectory>${assembly.output.folder}/about MSstatsTMT</outputDirectory>
+        </fileSet>
     </fileSets>
 
  
