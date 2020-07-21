@@ -65,5 +65,8 @@ The file should have the following columns:
 | 131 | 131.13818 |
 
 Here you have a couple of examples of annotation files:  
-[annotation file example 1](https://raw.githubusercontent.com/proteomicsyates/CensusTMT2MSstatsTMT/master/about%20MSstatsTMT/Annotation_valid_example1.csv)  
-[annotation file example 2](https://raw.githubusercontent.com/proteomicsyates/CensusTMT2MSstatsTMT/master/about%20MSstatsTMT/Annotation_valid_example2.csv)
+[annotation file example 1](https://raw.githubusercontent.com/proteomicsyates/CensusTMT2MSstatsTMT/master/about%20MSstatsTMT/Annotation_valid_example1.csv) 
+This example corresponds to a single TMT 10-plex (1 mixture, with no fractionations) where the first channel 126.127726 is a normalization channel in the MS run. There are 6 experimental conditions, without fractionation. Each channel is a biological replicate.  
+  
+[annotation file example 2](https://raw.githubusercontent.com/proteomicsyates/CensusTMT2MSstatsTMT/master/about%20MSstatsTMT/Annotation_valid_example2.csv)  
+This example corresponds to a single TMT 6-plex (1 mixture), with 8 fractions (one per MS runs), 3 biological replicates and 2 experimental conditions. 
