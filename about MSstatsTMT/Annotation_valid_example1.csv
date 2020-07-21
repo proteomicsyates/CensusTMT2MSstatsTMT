@@ -1,11 +1,11 @@
 Run,Fraction,TechRepMixture,Channel,Condition,Mixture,BioReplicate
-2020217_Yoshi_TMT1,1,1,126.127726,Norm,Mixture1,Norm
-2020217_Yoshi_TMT1,1,1,127.124761,WT,Mixture1,1
-2020217_Yoshi_TMT1,1,1,127.131081,Perm1_TG,Mixture1,4
-2020217_Yoshi_TMT1,1,1,128.128116,WT_pressure_overload,Mixture1,7
-2020217_Yoshi_TMT1,1,1,128.134436,Perm1_TG_pressure_overload,Mixture1,10
-2020217_Yoshi_TMT1,1,1,129.131471,Talin2_KO ,Mixture1,13
-2020217_Yoshi_TMT1,1,1,129.13779,dKO ,Mixture1,16
-2020217_Yoshi_TMT1,1,1,130.134825,WT,Mixture1,2
-2020217_Yoshi_TMT1,1,1,130.141145,Perm1_TG,Mixture1,5
-2020217_Yoshi_TMT1,1,1,131.13818,WT_pressure_overload,Mixture1,8
+2020217_TMT11,1,1,126.127726,Norm,Mixture1,Norm
+2020217_TMT11,1,1,127.124761,WT,Mixture1,1
+2020217_TMT11,1,1,127.131081,Perm1_TG,Mixture1,4
+2020217_TMT11,1,1,128.128116,WT_pressure_overload,Mixture1,7
+2020217_TMT11,1,1,128.134436,Perm1_TG_pressure_overload,Mixture1,10
+2020217_TMT11,1,1,129.131471,Talin2_KO ,Mixture1,13
+2020217_TMT11,1,1,129.13779,dKO ,Mixture1,16
+2020217_TMT11,1,1,130.134825,WT,Mixture1,2
+2020217_TMT11,1,1,130.141145,Perm1_TG,Mixture1,5
+2020217_TMT11,1,1,131.13818,WT_pressure_overload,Mixture1,8
