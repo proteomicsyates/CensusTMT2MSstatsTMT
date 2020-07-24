@@ -1,6 +1,7 @@
 package edu.scripps.yates.censustmt2msstatstmt;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -21,7 +22,9 @@ import org.springframework.core.io.ClassPathResource;
 
 import edu.scripps.yates.census.analysis.QuantCondition;
 import edu.scripps.yates.census.read.CensusOutParser;
+import edu.scripps.yates.census.read.QuantParserException;
 import edu.scripps.yates.census.read.WrongTMTLabels;
+import edu.scripps.yates.census.read.model.QuantAmount;
 import edu.scripps.yates.census.read.model.interfaces.QuantifiedPSMInterface;
 import edu.scripps.yates.census.read.model.interfaces.QuantifiedProteinInterface;
 import edu.scripps.yates.census.read.util.QuantificationLabel;
@@ -67,8 +70,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 //		this.psmSelection = psmSelection;
 //	}
 
-	public CensusTMT2MSstatsTMT(String[] args)
-			throws ParseException, DoNotInvokeRunMethod, SomeErrorInParametersOcurred {
+	public CensusTMT2MSstatsTMT(String[] args) throws SomeErrorInParametersOcurred, ParseException {
 		super(args);
 
 	}
@@ -78,7 +80,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 		CensusTMT2MSstatsTMT c = null;
 		try {
 			c = new CensusTMT2MSstatsTMT(args);
-			c.run();
+			c.safeRun();
 		} catch (final DoNotInvokeRunMethod e) {
 			// do nothing
 		} catch (final Exception e) {
@@ -108,15 +110,16 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			System.out.println("Output file: " + outputFile.getAbsolutePath());
 			// header
 			printHeader(fw);
-			final Map<QuantCondition, QuantificationLabel> labelsByCondition = getExperimentalDesign()
-					.getLabelsByCondition();
+			//
+			final Map<QuantificationLabel, QuantCondition>[] conditionsByLabelsList = getConditionsByLabelsArray(
+					this.inputFiles, getExperimentalDesign());
 			String plural = "";
 			if (this.inputFiles.size() > 1) {
 				plural = "s";
 			}
 			System.out.println("Reading input file" + plural + "...");
-			final CensusOutParser parser = new CensusOutParser(this.inputFiles.toArray(new File[0]), labelsByCondition,
-					null, null);
+			final CensusOutParser parser = new CensusOutParser(this.inputFiles.toArray(new File[0]),
+					conditionsByLabelsList, null, null);
 			if (parser.isTMT10().values().iterator().next()) {
 				System.out.println("TMT 10-Plex detected.");
 			} else if (parser.isTMT6().values().iterator().next()) {
@@ -127,7 +130,6 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			final List<QuantifiedPSMInterface> psms = new ArrayList<QuantifiedPSMInterface>();
 			psms.addAll(parser.getPSMMap().values());
 			System.out.println(psms.size() + " PSMs read from input file.");
-
 			// filter by min number of peptides per protein
 
 			final ProgressCounter counter = new ProgressCounter(psms.size(), ProgressPrintingType.PERCENTAGE_STEPS, 0);
@@ -197,8 +199,8 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			// create a map by sequence
 			final Map<String, List<QuantifiedPSMInterface>> psmsBySequenceAndCharge = new THashMap<String, List<QuantifiedPSMInterface>>();
 			for (final QuantifiedPSMInterface psm : psms) {
-				final String seq = psm.getBeforeSeq() + "." + psm.getSequence() + "." + psm.getAfterSeq() + "_"
-						+ psm.getChargeState();
+				final String seq = psm.getSequence() + "_" + psm.getChargeState();
+
 				if (!psmsBySequenceAndCharge.containsKey(seq)) {
 					psmsBySequenceAndCharge.put(seq, new ArrayList<QuantifiedPSMInterface>());
 				}
@@ -219,18 +221,22 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 				validProteins.add(acc);
 
 				final int charge = getChargeToPrint(psmsOfSeq);
-				final Map<QuantificationLabel, Double> intensities = getIntensitiesToPrint(psmsOfSeq, this.psmSelection,
-						this.useRawIntensity);
-				final QuantifiedPSMInterface firstPSM = psmsOfSeq.get(0);
-				final String peptideSequence = firstPSM.getBeforeSeq() + "." + firstPSM.getSequence() + "."
-						+ firstPSM.getAfterSeq();
-				final String psm = peptideSequence + "_" + charge;
-				final String run = firstPSM.getMSRun().getRunId();
-				for (final QuantificationLabel label : intensities.keySet().stream().sorted()
-						.collect(Collectors.toList())) {
-					printOutputLine(fw, label, intensities.get(label), acc, charge, peptideSequence, psm, run);
-				}
+				final Set<String> runs = psmsOfSeq.stream().map(psm -> psm.getMSRun().getRunId())
+						.collect(Collectors.toSet());
+				for (final String run : runs) {
+					final List<QuantifiedPSMInterface> psmsOfSeqAndRun = psmsOfSeq.stream()
+							.filter(psm -> psm.getMSRun().getRunId().equals(run)).collect(Collectors.toList());
+					final Map<QuantificationLabel, Double> intensities = getIntensitiesToPrint(psmsOfSeqAndRun,
+							this.psmSelection, this.useRawIntensity);
+					final QuantifiedPSMInterface firstPSM = psmsOfSeqAndRun.get(0);
+					final String peptideSequence = firstPSM.getFullSequence();
+					final String psm = peptideSequence + "_" + charge;
 
+					for (final QuantificationLabel label : intensities.keySet().stream().sorted()
+							.collect(Collectors.toList())) {
+						printOutputLine(fw, label, intensities.get(label), acc, charge, peptideSequence, psm, run);
+					}
+				}
 			}
 			System.out.println("\n*******");
 			System.out.println("Valid data: " + psms.size() + " PSMs");
@@ -252,6 +258,61 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 				fw.close();
 			}
 		}
+	}
+
+	/**
+	 * It returns a Map<QuantificationLabel, QuantCondition> per one if the
+	 * inputFiles. <br>
+	 * To do that, it reads each of the files and looks for the run names, so it
+	 * figures which mixture belongs to, and returns the mixture's Map
+	 * 
+	 * @param inputFiles2
+	 * @param experimentalDesign
+	 * @return
+	 */
+	private Map<QuantificationLabel, QuantCondition>[] getConditionsByLabelsArray(List<File> inputFiles2,
+			ExperimentalDesign experimentalDesign) {
+		final Map<QuantificationLabel, QuantCondition>[] ret = new Map[inputFiles2.size()];
+		int index = 0;
+		if (inputFiles2.size() == 1) {
+			ret[0] = experimentalDesign.getMixtures().iterator().next().getConditionsByLabels();
+			return ret;
+		}
+		for (final File inputFile : inputFiles2) {
+
+			try {
+				final CensusOutParser parser = new CensusOutParser(inputFile, null);
+				parser.setIgnoreACCFormat(true);
+				parser.setIgnoreTaxonomies(true);
+				final Set<String> runs = parser.getPSMMap().values().stream().map(psm -> psm.getMSRun().getRunId())
+						.collect(Collectors.toSet());
+				for (final Mixture mixture : experimentalDesign.getMixtures()) {
+					final Set<String> runsInMixture = mixture.getRuns();
+					boolean valid = true;
+					for (final String runInMixture : runsInMixture) {
+						if (!runs.contains(runInMixture)) {
+							valid = false;
+							break;
+						}
+					}
+					if (valid) {
+						ret[index] = mixture.getConditionsByLabels();
+					}
+				}
+				if (ret[index] == null) {
+					throw new IllegalArgumentException("Runs in input file '" + inputFile.getAbsolutePath() + "' ("
+							+ StringUtils.getSeparatedValueStringFromChars(runs.toArray(), ",")
+							+ ") are not found in the annotation file.");
+				}
+			} catch (final FileNotFoundException e) {
+			} catch (final QuantParserException e) {
+			} finally {
+				index++;
+			}
+		}
+
+		return ret;
+
 	}
 
 	private void printHeader(FileWriter fw) throws IOException {
@@ -301,18 +362,15 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 				QuantificationLabel.class);
 		final Set<Amount> amounts = psm.getAmounts();
 		for (final Amount amount : amounts) {
-			if (amount.getAmountType() == AmountType.NORMALIZED_INTENSITY && useRawIntensity) {
+			final QuantAmount quantAmount = (QuantAmount) amount;
+			if (quantAmount.getAmountType() == AmountType.NORMALIZED_INTENSITY && useRawIntensity) {
 				continue;
-			} else if (amount.getAmountType() == AmountType.INTENSITY && !useRawIntensity) {
+			} else if (quantAmount.getAmountType() == AmountType.INTENSITY && !useRawIntensity) {
 				continue;
-			} else if (amount.getAmountType() == AmountType.INTENSITY
-					|| amount.getAmountType() == AmountType.NORMALIZED_INTENSITY) {
-				final String name = amount.getCondition().getName();
-				final String[] split = name.split(ExperimentalDesign.SYMBOL);
-				final String conditionName = split[0];
-				final Float channel = Float.valueOf(split[1].trim());
-				final QuantificationLabel label = getExperimentalDesign().getLabelFromChannel(channel);
-				ret.put(label, amount.getValue());
+			} else if (quantAmount.getAmountType() == AmountType.INTENSITY
+					|| quantAmount.getAmountType() == AmountType.NORMALIZED_INTENSITY) {
+				final QuantificationLabel label = quantAmount.getLabel();
+				ret.put(label, quantAmount.getValue());
 			}
 		}
 		return ret;
@@ -325,19 +383,16 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 		for (final QuantifiedPSMInterface psm : psms) {
 			final Set<Amount> amounts = psm.getAmounts();
 			for (final Amount amount : amounts) {
-				if (amount.getAmountType() == AmountType.NORMALIZED_INTENSITY && useRawIntensity) {
+				final QuantAmount quantAmount = (QuantAmount) amount;
+				if (quantAmount.getAmountType() == AmountType.NORMALIZED_INTENSITY && useRawIntensity) {
 					continue;
-				} else if (amount.getAmountType() == AmountType.INTENSITY && !useRawIntensity) {
+				} else if (quantAmount.getAmountType() == AmountType.INTENSITY && !useRawIntensity) {
 					continue;
-				} else if (amount.getAmountType() == AmountType.INTENSITY
-						|| amount.getAmountType() == AmountType.NORMALIZED_INTENSITY) {
-					final String name = amount.getCondition().getName();
-					final String[] split = name.split(ExperimentalDesign.SYMBOL);
-					final String conditionName = split[0];
-					final Float channel = Float.valueOf(split[1].trim());
-					final QuantificationLabel label = getExperimentalDesign().getLabelFromChannel(channel);
+				} else if (quantAmount.getAmountType() == AmountType.INTENSITY
+						|| quantAmount.getAmountType() == AmountType.NORMALIZED_INTENSITY) {
+					final QuantificationLabel label = quantAmount.getLabel();
 					// for the average, don't use the zero
-					if (Double.compare(0.0, amount.getValue()) == 0) {
+					if (Double.compare(0.0, quantAmount.getValue()) == 0) {
 						continue;
 					}
 					if (!toAverage.containsKey(label)) {
@@ -363,17 +418,15 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 		for (final QuantifiedPSMInterface psm : psms) {
 			final Set<Amount> amounts = psm.getAmounts();
 			for (final Amount amount : amounts) {
-				if (amount.getAmountType() == AmountType.NORMALIZED_INTENSITY && useRawIntensity) {
+				final QuantAmount quantAmount = (QuantAmount) amount;
+				if (quantAmount.getAmountType() == AmountType.NORMALIZED_INTENSITY && useRawIntensity) {
 					continue;
-				} else if (amount.getAmountType() == AmountType.INTENSITY && !useRawIntensity) {
+				} else if (quantAmount.getAmountType() == AmountType.INTENSITY && !useRawIntensity) {
 					continue;
-				} else if (amount.getAmountType() == AmountType.INTENSITY
-						|| amount.getAmountType() == AmountType.NORMALIZED_INTENSITY) {
-					final String name = amount.getCondition().getName();
-					final String[] split = name.split(ExperimentalDesign.SYMBOL);
-//					final String conditionName = split[0];
-					final Float channel = Float.valueOf(split[1].trim());
-					final QuantificationLabel label = getExperimentalDesign().getLabelFromChannel(channel);
+				} else if (quantAmount.getAmountType() == AmountType.INTENSITY
+						|| quantAmount.getAmountType() == AmountType.NORMALIZED_INTENSITY) {
+
+					final QuantificationLabel label = quantAmount.getLabel();
 					if (!ret.containsKey(label)) {
 						ret.put(label, amount.getValue());
 					} else {
@@ -415,17 +468,17 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 	private void printOutputLine(FileWriter fw, QuantificationLabel label, double intensity, String acc, int charge,
 			String peptideSequence, String psm, String run) throws IOException {
 		final ExperimentalDesign experimentalDesign = getExperimentalDesign();
-		final Float channel = experimentalDesign.getChannelByLabel(label);
-		final QuantCondition condition = experimentalDesign.getConditionsByLabel().get(label);
-		final String conditionName = condition.getName().split(ExperimentalDesign.SYMBOL)[0];
-		final String mixture = experimentalDesign.getMixtureByRun(run);
+		final Mixture mixture = experimentalDesign.getMixtureByRun(run);
+		final Float channel = mixture.getChannelByLabel(label);
+		final QuantCondition condition = mixture.getConditionsByLabels().get(label);
+
 		final String techRepMixture = experimentalDesign.getTechRepMixtureByRun(run);
-		final String bioReplicate = experimentalDesign.getBioReplicate(channel, techRepMixture, mixture);
+		final String bioReplicate = experimentalDesign.getBioReplicate(channel, techRepMixture, mixture.getName());
 		final String channelString = Float.valueOf(channel).toString();
 
-		fw.write(acc + "\t" + peptideSequence + "\t" + charge + "\t" + psm + "\t" + mixture + "\t" + techRepMixture
-				+ "\t" + run + "\t" + channelString + "\t" + conditionName + "\t" + bioReplicate + "\t" + intensity
-				+ "\n");
+		fw.write(acc + "\t" + peptideSequence + "\t" + charge + "\t" + psm + "\t" + mixture.getName() + "\t"
+				+ techRepMixture + "\t" + run + "\t" + channelString + "\t" + condition.getName() + "\t" + bioReplicate
+				+ "\t" + intensity + "\n");
 
 	}
 
@@ -498,8 +551,13 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 	}
 
 	@Override
-	public void run() throws Exception {
-		runConversion();
+	public void run() {
+		try {
+			runConversion();
+		} catch (final Exception e) {
+			e.printStackTrace();
+			throw new RuntimeException(e);
+		}
 	}
 
 	@Override
@@ -550,7 +608,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 		System.out.println("Input file" + plural + ":");
 		int i = 1;
 		for (final File file : inputFiles) {
-			System.out.println(i++ + "'" + file.getAbsolutePath() + "'");
+			System.out.println(i++ + "- " + file.getAbsolutePath() + "'");
 		}
 		if (cmd.hasOption("an")) {
 			final String anOptionValue = cmd.getOptionValue("an");
