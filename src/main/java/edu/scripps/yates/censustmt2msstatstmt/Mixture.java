@@ -56,6 +56,8 @@ public class Mixture {
 			return getTMT10LabelFromChannel(channel);
 		} else if (isTMT6Plex()) {
 			return getTMT6LabelFromChannel(channel);
+		} else if (isTMT4Plex()) {
+			return getTMT4LabelFromChannel(channel);
 		} else {
 			throw new IllegalArgumentException("The number of different channels is " + getChannels().size()
 					+ " which is not supported (only 6 or 11 are supported).");
@@ -77,6 +79,23 @@ public class Mixture {
 		}
 
 		throw new IllegalArgumentException("Channel " + channel + " not recognized for TMT6plex");
+	}
+
+	private QuantificationLabel getTMT4LabelFromChannel(float channel) {
+		final TFloatList sortedChannels = new TFloatArrayList();
+		sortedChannels.addAll(this.getChannels());
+		sortedChannels.sort();
+		//
+		final List<QuantificationLabel> tmt4PlexLabels = QuantificationLabel.getTMT4PlexLabels();
+		for (int i = 0; i < tmt4PlexLabels.size(); i++) {
+			if (Float.compare(sortedChannels.get(i), channel) == 0) {
+				final QuantificationLabel quantificationLabel = tmt4PlexLabels.get(i);
+				channelsByLabel.put(quantificationLabel, channel);
+				return quantificationLabel;
+			}
+		}
+
+		throw new IllegalArgumentException("Channel " + channel + " not recognized for TMT4plex");
 	}
 
 	private QuantificationLabel getTMT10LabelFromChannel(float channel) {
@@ -120,6 +139,10 @@ public class Mixture {
 			return channelsByLabel.get(label);
 		}
 		throw new IllegalArgumentException(label + " not supported yet.");
+	}
+
+	private boolean isTMT4Plex() {
+		return getChannels().size() == 4;
 	}
 
 	private boolean isTMT6Plex() {
