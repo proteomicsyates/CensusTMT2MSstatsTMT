@@ -1,11 +1,11 @@
 package edu.scripps.yates.censustmt2msstatstmt;
 
-public enum PSMSelectionType {
-	SUM, AVERAGE, HIGHEST;
+public enum PSMAggregationType {
+	SUM, AVG, HIGHEST;
 
 	public static String printValidValues() {
 		final StringBuilder sb = new StringBuilder();
-		for (final PSMSelectionType p : values()) {
+		for (final PSMAggregationType p : values()) {
 			if (!"".equals(sb.toString())) {
 				sb.append(",");
 			}
