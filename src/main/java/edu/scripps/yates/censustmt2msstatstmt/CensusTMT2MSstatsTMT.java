@@ -2,11 +2,10 @@ package edu.scripps.yates.censustmt2msstatstmt;
 
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -17,7 +16,6 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.log4j.Logger;
-import org.apache.tools.ant.DirectoryScanner;
 import org.springframework.core.io.ClassPathResource;
 
 import edu.scripps.yates.census.analysis.QuantCondition;
@@ -28,35 +26,55 @@ import edu.scripps.yates.census.read.model.QuantAmount;
 import edu.scripps.yates.census.read.model.interfaces.QuantifiedPSMInterface;
 import edu.scripps.yates.census.read.model.interfaces.QuantifiedProteinInterface;
 import edu.scripps.yates.census.read.util.QuantificationLabel;
+import edu.scripps.yates.censustmt2msstatstmt.singletons.FilesManager;
+import edu.scripps.yates.censustmt2msstatstmt.singletons.GeneMapper;
+import edu.scripps.yates.censustmt2msstatstmt.singletons.LuciphorIntegrator;
+import edu.scripps.yates.censustmt2msstatstmt.singletons.PTMList;
+import edu.scripps.yates.censustmt2msstatstmt.singletons.ProteinSequences;
+import edu.scripps.yates.censustmt2msstatstmt.singletons.SPCFilter;
+import edu.scripps.yates.censustmt2msstatstmt.singletons.UPLR;
+import edu.scripps.yates.censustmt2msstatstmt.util.DataUtil;
 import edu.scripps.yates.utilities.appversion.AppVersion;
-import edu.scripps.yates.utilities.maths.Maths;
-import edu.scripps.yates.utilities.progresscounter.ProgressCounter;
-import edu.scripps.yates.utilities.progresscounter.ProgressPrintingType;
+import edu.scripps.yates.utilities.dates.DatesUtil;
+import edu.scripps.yates.utilities.grouping.GroupableProtein;
+import edu.scripps.yates.utilities.grouping.PAnalyzer;
 import edu.scripps.yates.utilities.properties.PropertiesUtil;
-import edu.scripps.yates.utilities.proteomicsmodel.Amount;
+import edu.scripps.yates.utilities.proteomicsmodel.PTM;
 import edu.scripps.yates.utilities.proteomicsmodel.enums.AmountType;
+import edu.scripps.yates.utilities.sequence.PositionInProtein;
 import edu.scripps.yates.utilities.strings.StringUtils;
 import edu.scripps.yates.utilities.swing.CommandLineProgramGuiEnclosable;
 import edu.scripps.yates.utilities.swing.DoNotInvokeRunMethod;
 import edu.scripps.yates.utilities.swing.SomeErrorInParametersOcurred;
-import gnu.trove.list.TDoubleList;
-import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.map.hash.THashMap;
 import gnu.trove.set.hash.THashSet;
 
 public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 	private final static Logger log = Logger.getLogger(CensusTMT2MSstatsTMT.class);
-	private static final String SUFFIX = "_msstatsTMT.txt";
+
 	private static AppVersion version;
-	private List<File> inputFiles = new ArrayList<File>();
 	private boolean uniquePeptides;
 	private boolean useRawIntensity;
-	private PSMSelectionType psmSelection;
+	private PSMAggregationType psmSelection;
 	private File experimentalDesignFile;
-	private String experimentalDesignSeparator;
 	private String decoyPrefix;
-	private ExperimentalDesign ed;
-	private int minNumPeptides;
+	private Integer minSPC;
+	private boolean msstatsoutput;
+	private File fastaFile;
+	private Float luciphorLocalFDRThreshold;
+	private Float luciphorGlobalFDRThreshold;
+	private String outputPrefix;
+	private DecoyFilter decoyFilter;
+
+	private CensusOutParser parser;
+
+	private edu.scripps.yates.censustmt2msstatstmt.SPC_FILTER_TYPE spcFilterType;
+
+	private File luciphorFile;
+
+	private Float minPurity;
+
+	private boolean createExcelFile;
 
 //	public CensusTMT2MSstatsTMT(File inputFile, File experimentalDesignFile, String experimentalDesignSeparator,
 //			boolean uniquePeptides, boolean useRawIntensity, String decoyPrefix, PSMSelectionType psmSelection) {
@@ -72,7 +90,6 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 
 	public CensusTMT2MSstatsTMT(String[] args) throws SomeErrorInParametersOcurred, ParseException {
 		super(args);
-
 	}
 
 	public static void main(String[] args) {
@@ -88,163 +105,206 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 		}
 	}
 
-	private String getInputFileNamesString() {
-		final StringBuilder sb = new StringBuilder();
-		for (final File file : inputFiles) {
-			if (!"".equals(sb.toString())) {
-				sb.append(", ");
-			}
-			sb.append(FilenameUtils.getName(file.getAbsolutePath()));
+	private void runConversionToMSstatsTMT() throws Exception {
 
+		if (decoyPrefix != null) {
+			decoyFilter = new DecoyFilter(decoyPrefix);
 		}
-		return sb.toString();
-	}
-
-	private void runConversion() throws Exception {
-		FileWriter fw = null;
+		ExperimentalDesign ed = null;
 		try {
-			ed = null;
-			System.out.println("Starting conversion of file " + getInputFileNamesString());
-			final File outputFile = getOutputFile();
-			fw = new FileWriter(outputFile);
-			System.out.println("Output file: " + outputFile.getAbsolutePath());
-			// header
-			printHeader(fw);
-			//
+
+			System.out.println("Starting conversion of file " + FilesManager.getInstance().getInputFileNamesString());
+
+			if (this.msstatsoutput) {
+				ed = new ExperimentalDesign(experimentalDesignFile, ",");
+			}
+			// 1- get conditions and labels
 			final Map<QuantificationLabel, QuantCondition>[] conditionsByLabelsList = getConditionsByLabelsArray(
-					this.inputFiles, getExperimentalDesign());
+					FilesManager.getInstance().getInputFiles(), ed);
 			String plural = "";
-			if (this.inputFiles.size() > 1) {
+			if (FilesManager.getInstance().getInputFiles().size() > 1) {
 				plural = "s";
 			}
-			System.out.println("Reading input file" + plural + "...");
-			final CensusOutParser parser = new CensusOutParser(this.inputFiles.toArray(new File[0]),
+
+			// 2- read input files with parser
+
+			parser = new CensusOutParser(FilesManager.getInstance().getInputFiles().toArray(new File[0]),
 					conditionsByLabelsList, null, null);
+			parser.setChargeSensible(true);
+			parser.setDistinguishModifiedSequences(true);
+			parser.setDecoyPattern(this.decoyPrefix);
+
+			List<QuantificationLabel> labels = null;
 			if (parser.isTMT10().values().iterator().next()) {
-				System.out.println("TMT 10-Plex detected.");
+				System.out.println("10-Plex detected.");
+				labels = QuantificationLabel.getTMT10PlexLabels();
 			} else if (parser.isTMT6().values().iterator().next()) {
-				System.out.println("TMT 6-Plex detected.");
+				System.out.println("6-Plex detected.");
+				labels = QuantificationLabel.getTMT6PlexLabels();
 			} else if (parser.isTMT11().values().iterator().next()) {
-				System.out.println("TMT 11-Plex detected.");
+				System.out.println("11-Plex detected.");
+				labels = QuantificationLabel.getTMT11PlexLabels();
+			} else if (parser.isTMT4().values().iterator().next()) {
+				System.out.println("4-Plex detected.");
+				labels = QuantificationLabel.getTMT4PlexLabels();
 			}
-			final List<QuantifiedPSMInterface> psms = new ArrayList<QuantifiedPSMInterface>();
+			System.out.println("Reading input file" + plural + "...");
+			// 3- map genes to proteins from protein descriptions in proteins
+			final Collection<QuantifiedProteinInterface> proteins = parser.getProteinMap().values();
+			GeneMapper.getInstance().mapGenesFromProteinDescriptionsInInputFile(proteins);
+
+			// get the PSMs
+			List<QuantifiedPSMInterface> psms = new ArrayList<QuantifiedPSMInterface>();
 			psms.addAll(parser.getPSMMap().values());
 			System.out.println(psms.size() + " PSMs read from input file.");
-			// filter by min number of peptides per protein
 
-			final ProgressCounter counter = new ProgressCounter(psms.size(), ProgressPrintingType.PERCENTAGE_STEPS, 0);
-			Iterator<QuantifiedPSMInterface> psmsIterator = psms.iterator();
-			if (decoyPrefix != null && !"".equals(decoyPrefix)) {
-				final Set<QuantifiedProteinInterface> discardedProteins = new THashSet<QuantifiedProteinInterface>();
-				final int initialPSMs = psms.size();
-				while (psmsIterator.hasNext()) {
-					final QuantifiedPSMInterface psm = psmsIterator.next();
+			// setting missing intensities to 1
+			setMissingIntensityValuesTo1(psms, labels);
 
-					for (final QuantifiedProteinInterface protein : psm.getQuantifiedProteins()) {
-						// //decoy
-						if (decoyPrefix != null && protein.getAccession().startsWith(decoyPrefix)) {
-							psmsIterator.remove();
-							discardedProteins.add(protein);
-							break;
-						}
+			// 4- merge psms with luciphor ones
+			if (luciphorFile != null) {
+				LuciphorIntegrator.getInstance(luciphorFile).mergeWithLuciphor(psms, luciphorLocalFDRThreshold,
+						luciphorGlobalFDRThreshold);
+			}
+
+			// 5- group proteins so that we can remove non conclusive ones
+			final List<GroupableProtein> proteinsToGroup = new ArrayList<GroupableProtein>();
+			proteinsToGroup.addAll(proteins);
+			final boolean separateNonConclusiveProteins = true;
+			final PAnalyzer panalyzer = new PAnalyzer(separateNonConclusiveProteins);
+			panalyzer.run(proteinsToGroup);
+
+			// 6- retrieve annotations from uniprot
+			final long t1 = System.currentTimeMillis();
+			System.out.println("Retrieving information from UniprotKB for " + proteins.size()
+					+ " proteins. This can take a few minutes (2-3) for the first time. Next time information will be ready to use in few seconds. Please wait...");
+			UPLR.getInstance().getAnnotatedProteins(null, parser.getProteinMap().keySet());
+			final long t2 = System.currentTimeMillis() - t1;
+			System.out.println(
+					"Information retrieved from UniprotKB in " + DatesUtil.getDescriptiveTimeFromMillisecs(t2));
+
+			// 7- if ptms is not empty, we have to get the protein sequences
+			if (!PTMList.getInstance().isEmpty() || (this.fastaFile != null && this.fastaFile.exists())) {
+				ProteinSequences.getInstance().getProteinSequences(parser.getProteinMap().keySet(), this.fastaFile);
+			}
+
+			final Set<String> validPSMKeys = new THashSet<String>();
+			int discardedByTMTPurity = 0;
+			int discardedByPTMs = 0;
+			int discardedAsDecoy = 0;
+			int discardedByUniqueness = 0;
+
+			// 8- Iterate over psms
+			final Set<String> psmsWronglymapped = new THashSet<String>();
+			for (final QuantifiedPSMInterface psm : psms) {
+				// 8.1- check whether the peptides are wrongly mapped in the input file
+				for (final QuantifiedProteinInterface protein : psm.getQuantifiedProteins()) {
+					final String acc = protein.getAccession();
+					final List<PositionInProtein> startingPositionsInProtein = psm.getStartingPositionsInProtein(acc,
+							UPLR.getInstance(), ProteinSequences.getInstance());
+					if (startingPositionsInProtein.isEmpty()) {
+						psmsWronglymapped.add(psm.getScanNumber() + "\t" + psm.getFullSequence() + "\t" + acc + "\t"
+								+ protein.getDescription());
 					}
 				}
-				System.out.println(discardedProteins.size() + " proteins discarded as DECOYs.");
-				System.out.println(
-						"Now working with " + psms.size() + " PSMs (" + (initialPSMs - psms.size()) + " discarded).");
-			}
-			if (minNumPeptides > 1 || uniquePeptides) {
-				int psmsDiscardedByUniqueness = 0;
-				final Set<QuantifiedProteinInterface> discardedProteins = new THashSet<QuantifiedProteinInterface>();
-				final int initialPSMs = psms.size();
-				// filtering by minNumPeptides
-				psmsIterator = psms.iterator();
-				while (psmsIterator.hasNext()) {
-					counter.increment();
-					final String printIfNecessary = counter.printIfNecessary();
-					if (!"".equals(printIfNecessary)) {
-						System.out.println("Filtering data..." + printIfNecessary);
-					}
-					final QuantifiedPSMInterface psm = psmsIterator.next();
-					if (uniquePeptides && psm.getQuantifiedProteins().size() > 1) {
-						psmsIterator.remove();
-						psmsDiscardedByUniqueness++;
+				// 8.2- check decoy
+				if (decoyFilter != null && decoyFilter.isDecoy(psm)) {
+					psm.setDiscarded(true);
+					discardedAsDecoy++;
+					continue;
+				}
+				// 8.3- TMT purity
+				if (minPurity != null && !DataUtil.isTMTPurityValid(psm, minPurity)) {
+					psm.setDiscarded(true);
+					discardedByTMTPurity++;
+					continue;
+				}
+
+				// 8.4 if ptmList is not empty, check if contains that PTM
+				if (!PTMList.getInstance().isEmpty()) {
+					if (psm.getPTMs().isEmpty()) {
+						psm.setDiscarded(true);
+						discardedByPTMs++;
 						continue;
 					}
-					boolean anyProteinIsValid = false;
-					for (final QuantifiedProteinInterface protein : psm.getQuantifiedProteins()) {
-						final Set<String> peptideCharges = new THashSet<String>();
-						protein.getQuantifiedPSMs().stream()
-								.forEach(p -> peptideCharges.add(p.getFullSequence() + p.getChargeState()));
-						if (peptideCharges.size() >= minNumPeptides) {
-							anyProteinIsValid = true;
-						} else {
-							discardedProteins.add(protein);
+					boolean ptmFound = false;
+					for (final float deltaMass : PTMList.getInstance()) {
+						for (final PTM ptm : psm.getPTMs()) {
+							if (Math.abs(ptm.getMassShift() - deltaMass) < PTMList.MASS_PRECISION) {
+								ptmFound = true;
+								break;
+							}
 						}
 					}
-					if (!anyProteinIsValid) {
-						psmsIterator.remove();
+					if (!ptmFound) {
+						psm.setDiscarded(true);
+						discardedByPTMs++;
+						continue;
 					}
 				}
-				System.out.println(discardedProteins.size() + " proteins discarded for not having at least "
-						+ minNumPeptides + " peptides (sequence+charge).");
+				// 8.5- discard non-unique psms
 				if (uniquePeptides) {
-					System.out.println(psmsDiscardedByUniqueness + " PSMs discarded because they are not unique.");
-				}
-				System.out.println(
-						" Now working with " + psms.size() + " PSMs (" + (initialPSMs - psms.size()) + " discarded).");
-
-			}
-
-			// create a map by sequence
-			final Map<String, List<QuantifiedPSMInterface>> psmsBySequenceAndCharge = new THashMap<String, List<QuantifiedPSMInterface>>();
-			for (final QuantifiedPSMInterface psm : psms) {
-				final String seq = psm.getSequence() + "_" + psm.getChargeState();
-
-				if (!psmsBySequenceAndCharge.containsKey(seq)) {
-					psmsBySequenceAndCharge.put(seq, new ArrayList<QuantifiedPSMInterface>());
-				}
-				psmsBySequenceAndCharge.get(seq).add(psm);
-			}
-
-			// iterate over it. Sort first the sequences so that they will appear in order
-			// in the output
-			final Set<String> seqsSet = psmsBySequenceAndCharge.keySet();
-			final List<String> seqList = seqsSet.stream().sorted().collect(Collectors.toCollection(ArrayList::new));
-			final Set<String> validProteins = new THashSet<String>();
-			for (final String seq : seqList) {
-				final List<QuantifiedPSMInterface> psmsOfSeq = psmsBySequenceAndCharge.get(seq);
-
-				final List<String> accs = getAccToPrint(psmsOfSeq);
-				final String acc = StringUtils.getSortedSeparatedValueStringFromChars(accs, ",");
-
-				validProteins.add(acc);
-
-				final int charge = getChargeToPrint(psmsOfSeq);
-				final Set<String> runs = psmsOfSeq.stream().map(psm -> psm.getMSRun().getRunId())
-						.collect(Collectors.toSet());
-				for (final String run : runs) {
-					final List<QuantifiedPSMInterface> psmsOfSeqAndRun = psmsOfSeq.stream()
-							.filter(psm -> psm.getMSRun().getRunId().equals(run)).collect(Collectors.toList());
-					final Map<QuantificationLabel, Double> intensities = getIntensitiesToPrint(psmsOfSeqAndRun,
-							this.psmSelection, this.useRawIntensity);
-					final QuantifiedPSMInterface firstPSM = psmsOfSeqAndRun.get(0);
-					final String peptideSequence = firstPSM.getFullSequence();
-					final String psm = peptideSequence + "_" + charge;
-
-					for (final QuantificationLabel label : intensities.keySet().stream().sorted()
-							.collect(Collectors.toList())) {
-						printOutputLine(fw, label, intensities.get(label), acc, charge, peptideSequence, psm, run);
+					if (psm.getQuantifiedProteins().size() > 1) {
+						psm.setDiscarded(true);
+						discardedByUniqueness++;
 					}
 				}
+				// if we are here, the psm is fine.
+				validPSMKeys.add(psm.getKey());
 			}
-			System.out.println("\n*******");
-			System.out.println("Valid data: " + psms.size() + " PSMs");
-			System.out.println(psmsBySequenceAndCharge.size() + " peptides (sequences+charge)");
-			System.out.println(validProteins.size() + " proteins\n*******");
 
-			log.info("File written at " + outputFile.getAbsolutePath());
-			System.out.println("File ready at " + outputFile.getAbsolutePath());
+			if (!psmsWronglymapped.isEmpty()) {
+				String message = "WARNING!! There are " + psmsWronglymapped.size()
+						+ " that are wrongly mapped to the proteins in your input file!";
+				if (!PTMList.getInstance().isEmpty()) {
+					message += " For the PTM-based analysis, these peptides were not able to be mapped to any site in the protein.";
+				}
+				if (fastaFile != null) {
+					message += " This means that either you used the wrong fasta file (not the one used in the search of your data), or there is a problem in your input files";
+				} else {
+					message += " This means that sequences retrieved in UniprotKB have changed compared to the ones you used in your search. Try to use the fasta file you actually used for search if you want to avoid this problem.";
+				}
+				System.out.println(message);
+				FilesManager.getInstance().printList(psmsWronglymapped, "wrong_mapped");
+			}
+			if (discardedByUniqueness > 0) {
+				System.out.println(discardedByUniqueness + " PSMs discarded because they are not unique");
+			}
+			if (discardedAsDecoy > 0) {
+				System.out.println(discardedAsDecoy + " PSMs discarded as decoys");
+			}
+			if (minPurity != null) {
+				System.out.println(discardedByTMTPurity + " PSMs discarded by TMT purity threshold " + minPurity);
+			}
+			if (!PTMList.getInstance().isEmpty()) {
+				System.out.println(discardedByPTMs + " PSMs discarded for not having any PTM with delta mass: ["
+						+ StringUtils.getSeparatedValueStringFromChars(PTMList.getInstance().toArray(), ",") + "]");
+			}
+			System.out.println(psms.size() - validPSMKeys.size() + " PSMs discarded in total");
+			System.out.println(validPSMKeys.size() + " PSMs pass the filters (if any)");
+
+			// 9- SPC filter
+			if (minSPC != null && minSPC > 1) {
+				psms = SPCFilter.applySPCFilter(psms, this.minSPC, this.spcFilterType);
+			}
+
+			// 10- print PSM level file
+			FilesManager.getInstance().printPSMLevelFile(psms, parser, labels);
+
+			// 11- print MSstatsTMT file
+			if (this.msstatsoutput) {
+				FilesManager.getInstance().printMSstatsTMTFFile(psms, ed, this.useRawIntensity, this.psmSelection);
+			}
+
+			// 12- print peptide level file
+			FilesManager.getInstance().printPeptideLevelFile(parser.getPeptideMap().values(), psmSelection, labels);
+
+			//
+			if (createExcelFile) {
+				FilesManager.getInstance().generateExcelFile();
+			}
+			//
+
 		} catch (final Exception e) {
 			if (e instanceof WrongTMTLabels) {
 				throw new WrongTMTLabels(
@@ -253,10 +313,41 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			} else {
 				throw e;
 			}
-		} finally {
-			if (fw != null) {
-				fw.close();
+		}
+	}
+
+	private void setMissingIntensityValuesTo1(List<QuantifiedPSMInterface> psms, List<QuantificationLabel> labels) {
+		int intensitiesChanged = 0;
+		for (final QuantifiedPSMInterface psm : psms) {
+
+			final EnumMap<QuantificationLabel, Set<QuantAmount>> amountsByLabels = DataUtil
+					.getQuantAmountsByLabels(psm);
+			for (final QuantificationLabel label : labels) {
+				final Set<QuantAmount> quantAmounts = amountsByLabels.get(label);
+				if (quantAmounts != null && !quantAmounts.isEmpty()) {
+					boolean someChanged = false;
+					for (final QuantAmount amount : quantAmounts) {
+						if (Double.compare(amount.getValue(), 0.0) == 0) {
+							amount.setValue(1.0);
+							someChanged = true;
+						}
+					}
+					if (someChanged) {
+						intensitiesChanged++;
+					}
+				} else {
+					// create empty amounts
+					final QuantAmount quantAmount = new QuantAmount(1.0, AmountType.INTENSITY, null, label);
+					psm.addAmount(quantAmount);
+					final QuantAmount normQuantAmount = new QuantAmount(1.0, AmountType.NORMALIZED_INTENSITY, null,
+							label);
+					psm.addAmount(normQuantAmount);
+					intensitiesChanged++;
+				}
 			}
+		}
+		if (intensitiesChanged > 0) {
+			System.out.println(intensitiesChanged + "  missing intensities were set to 1.0");
 		}
 	}
 
@@ -269,230 +360,110 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 	 * @param inputFiles2
 	 * @param experimentalDesign
 	 * @return
+	 * @throws IOException
 	 */
 	private Map<QuantificationLabel, QuantCondition>[] getConditionsByLabelsArray(List<File> inputFiles2,
-			ExperimentalDesign experimentalDesign) {
+			ExperimentalDesign experimentalDesign) throws IOException {
 		final Map<QuantificationLabel, QuantCondition>[] ret = new Map[inputFiles2.size()];
-		int index = 0;
-		if (inputFiles2.size() == 1) {
-			ret[0] = experimentalDesign.getMixtures().iterator().next().getConditionsByLabels();
-			return ret;
-		}
-		for (final File inputFile : inputFiles2) {
+		if (experimentalDesign != null) {
+			if (inputFiles2.size() == 1) {
+				ret[0] = experimentalDesign.getMixtures().iterator().next().getConditionsByLabels();
+				return ret;
+			}
+			int index = 0;
+			for (final File inputFile : inputFiles2) {
 
-			try {
-				final CensusOutParser parser = new CensusOutParser(inputFile, null);
-				parser.setIgnoreACCFormat(true);
-				parser.setIgnoreTaxonomies(true);
-				final Set<String> runs = parser.getPSMMap().values().stream().map(psm -> psm.getMSRun().getRunId())
-						.collect(Collectors.toSet());
-				for (final Mixture mixture : experimentalDesign.getMixtures()) {
-					final Set<String> runsInMixture = mixture.getRuns();
-					boolean valid = true;
-					for (final String runInMixture : runsInMixture) {
-						if (!runs.contains(runInMixture)) {
-							valid = false;
-							break;
+				try {
+					final CensusOutParser parser = new CensusOutParser(inputFile, null);
+					parser.setIgnoreACCFormat(true);
+					parser.setIgnoreTaxonomies(true);
+					parser.setChargeSensible(true);
+					parser.setDistinguishModifiedSequences(true);
+					final Set<String> runs = parser.getPSMMap().values().stream().map(psm -> psm.getMSRun().getRunId())
+							.collect(Collectors.toSet());
+					for (final Mixture mixture : experimentalDesign.getMixtures()) {
+						final Set<String> runsInMixture = mixture.getRuns();
+						boolean valid = true;
+						for (final String runInMixture : runsInMixture) {
+							if (!runs.contains(runInMixture)) {
+								valid = false;
+								break;
+							}
+						}
+						if (valid) {
+							ret[index] = mixture.getConditionsByLabels();
 						}
 					}
-					if (valid) {
-						ret[index] = mixture.getConditionsByLabels();
+					if (ret[index] == null) {
+						throw new IllegalArgumentException("Runs in input file '" + inputFile.getAbsolutePath() + "' ("
+								+ StringUtils.getSeparatedValueStringFromChars(runs.toArray(), ",")
+								+ ") are not found in the annotation file.");
 					}
-				}
-				if (ret[index] == null) {
-					throw new IllegalArgumentException("Runs in input file '" + inputFile.getAbsolutePath() + "' ("
-							+ StringUtils.getSeparatedValueStringFromChars(runs.toArray(), ",")
-							+ ") are not found in the annotation file.");
-				}
-			} catch (final FileNotFoundException e) {
-			} catch (final QuantParserException e) {
-			} finally {
-				index++;
-			}
-		}
-
-		return ret;
-
-	}
-
-	private void printHeader(FileWriter fw) throws IOException {
-		fw.write(
-				"ProteinName\tPeptideSequence\tCharge\tPSM\tMixture\tTechRepMixture\tRun\tChannel\tCondition\tBioReplicate\tIntensity\n");
-
-	}
-
-	private Map<QuantificationLabel, Double> getIntensitiesToPrint(List<QuantifiedPSMInterface> psms,
-			PSMSelectionType psmSelection, boolean useRawIntensity) throws IOException {
-
-		switch (psmSelection) {
-		case HIGHEST:
-			return getHighestIntensitiesToPrint(psms, useRawIntensity);
-		case AVERAGE:
-			return getAveragedIntensitiesToPrint(psms, useRawIntensity);
-		case SUM:
-			return getSummedIntensitiesToPrint(psms, useRawIntensity);
-		default:
-			throw new IllegalArgumentException(psmSelection + " PSM selection is not supported yet");
-		}
-
-	}
-
-	private Map<QuantificationLabel, Double> getHighestIntensitiesToPrint(List<QuantifiedPSMInterface> psms,
-			boolean useRawIntensity) throws IOException {
-		QuantifiedPSMInterface highestPSM = null;
-		double highestSum = -Double.MAX_VALUE;
-		for (final QuantifiedPSMInterface psm : psms) {
-			final Map<QuantificationLabel, Double> ret = getIntensitiesFromPSM(psm, useRawIntensity);
-			double sum = 0.0;
-			for (final double intensity : ret.values()) {
-				sum += intensity;
-			}
-			if (sum > highestSum) {
-				highestPSM = psm;
-				highestSum = sum;
-			}
-		}
-		// highest PSm is the one to report
-		return getIntensitiesFromPSM(highestPSM, useRawIntensity);
-	}
-
-	private Map<QuantificationLabel, Double> getIntensitiesFromPSM(QuantifiedPSMInterface psm, boolean useRawIntensity)
-			throws IOException {
-		final Map<QuantificationLabel, Double> ret = new EnumMap<QuantificationLabel, Double>(
-				QuantificationLabel.class);
-		final Set<Amount> amounts = psm.getAmounts();
-		for (final Amount amount : amounts) {
-			final QuantAmount quantAmount = (QuantAmount) amount;
-			if (quantAmount.getAmountType() == AmountType.NORMALIZED_INTENSITY && useRawIntensity) {
-				continue;
-			} else if (quantAmount.getAmountType() == AmountType.INTENSITY && !useRawIntensity) {
-				continue;
-			} else if (quantAmount.getAmountType() == AmountType.INTENSITY
-					|| quantAmount.getAmountType() == AmountType.NORMALIZED_INTENSITY) {
-				final QuantificationLabel label = quantAmount.getLabel();
-				ret.put(label, quantAmount.getValue());
-			}
-		}
-		return ret;
-	}
-
-	private Map<QuantificationLabel, Double> getAveragedIntensitiesToPrint(List<QuantifiedPSMInterface> psms,
-			boolean useRawIntensity) throws IOException {
-		final Map<QuantificationLabel, TDoubleList> toAverage = new EnumMap<QuantificationLabel, TDoubleList>(
-				QuantificationLabel.class);
-		for (final QuantifiedPSMInterface psm : psms) {
-			final Set<Amount> amounts = psm.getAmounts();
-			for (final Amount amount : amounts) {
-				final QuantAmount quantAmount = (QuantAmount) amount;
-				if (quantAmount.getAmountType() == AmountType.NORMALIZED_INTENSITY && useRawIntensity) {
-					continue;
-				} else if (quantAmount.getAmountType() == AmountType.INTENSITY && !useRawIntensity) {
-					continue;
-				} else if (quantAmount.getAmountType() == AmountType.INTENSITY
-						|| quantAmount.getAmountType() == AmountType.NORMALIZED_INTENSITY) {
-					final QuantificationLabel label = quantAmount.getLabel();
-					// for the average, don't use the zero
-					if (Double.compare(0.0, quantAmount.getValue()) == 0) {
-						continue;
-					}
-					if (!toAverage.containsKey(label)) {
-						toAverage.put(label, new TDoubleArrayList());
-					}
-
-					toAverage.get(label).add(amount.getValue());
+				} catch (final FileNotFoundException e) {
+				} catch (final QuantParserException e) {
+				} finally {
+					index++;
 				}
 			}
-		}
-		final Map<QuantificationLabel, Double> ret = new EnumMap<QuantificationLabel, Double>(
-				QuantificationLabel.class);
-		for (final QuantificationLabel label : toAverage.keySet()) {
-			ret.put(label, Maths.mean(toAverage.get(label)));
-		}
-		return ret;
-	}
+		} else {
 
-	private Map<QuantificationLabel, Double> getSummedIntensitiesToPrint(List<QuantifiedPSMInterface> psms,
-			boolean useRawIntensity) throws IOException {
-		final Map<QuantificationLabel, Double> ret = new EnumMap<QuantificationLabel, Double>(
-				QuantificationLabel.class);
-		for (final QuantifiedPSMInterface psm : psms) {
-			final Set<Amount> amounts = psm.getAmounts();
-			for (final Amount amount : amounts) {
-				final QuantAmount quantAmount = (QuantAmount) amount;
-				if (quantAmount.getAmountType() == AmountType.NORMALIZED_INTENSITY && useRawIntensity) {
-					continue;
-				} else if (quantAmount.getAmountType() == AmountType.INTENSITY && !useRawIntensity) {
-					continue;
-				} else if (quantAmount.getAmountType() == AmountType.INTENSITY
-						|| quantAmount.getAmountType() == AmountType.NORMALIZED_INTENSITY) {
-
-					final QuantificationLabel label = quantAmount.getLabel();
-					if (!ret.containsKey(label)) {
-						ret.put(label, amount.getValue());
+			final CensusOutParser parser = new CensusOutParser(inputFiles2, null, null, null);
+			parser.setIgnoreACCFormat(true);
+			parser.setIgnoreTaxonomies(true);
+			parser.setChargeSensible(true);
+			parser.setDistinguishModifiedSequences(true);
+			int index = 0;
+			for (final File inputFile : inputFiles2) {
+				try {
+					final Map<QuantificationLabel, QuantCondition> conditionsByLabels = new THashMap<QuantificationLabel, QuantCondition>();
+					final boolean istmt4 = parser.isTMT4Files().get(inputFile);
+					final boolean istmt6 = parser.isTMT6Files().get(inputFile);
+					final boolean istmt10 = parser.isTMT10Files().get(inputFile);
+					final boolean istmt11 = parser.isTMT11Files().get(inputFile);
+					if (istmt4) {
+						final List<QuantificationLabel> tmt4PlexLabels = QuantificationLabel.getTMT4PlexLabels();
+						int cond = 1;
+						for (final QuantificationLabel quantificationLabel : tmt4PlexLabels) {
+							conditionsByLabels.put(quantificationLabel, new QuantCondition("cond" + cond));
+							cond++;
+						}
+					} else if (istmt6) {
+						final List<QuantificationLabel> tmt6PlexLabels = QuantificationLabel.getTMT6PlexLabels();
+						int cond = 1;
+						for (final QuantificationLabel quantificationLabel : tmt6PlexLabels) {
+							conditionsByLabels.put(quantificationLabel, new QuantCondition("cond" + cond));
+							cond++;
+						}
+					} else if (istmt10) {
+						final List<QuantificationLabel> tmt10PlexLabels = QuantificationLabel.getTMT10PlexLabels();
+						int cond = 1;
+						for (final QuantificationLabel quantificationLabel : tmt10PlexLabels) {
+							conditionsByLabels.put(quantificationLabel, new QuantCondition("cond" + cond));
+							cond++;
+						}
+					} else if (istmt11) {
+						final List<QuantificationLabel> tmt11PlexLabels = QuantificationLabel.getTMT11PlexLabels();
+						int cond = 1;
+						for (final QuantificationLabel quantificationLabel : tmt11PlexLabels) {
+							conditionsByLabels.put(quantificationLabel, new QuantCondition("cond" + cond));
+							cond++;
+						}
 					} else {
-						ret.put(label, ret.get(label) + amount.getValue());
+						throw new IllegalArgumentException(
+								"The file is not detected as any TMT type (TMT6, TMT10 or TMT11");
 					}
+					ret[index] = conditionsByLabels;
+
+				} catch (final FileNotFoundException e) {
+				} finally {
+					index++;
 				}
 			}
+
 		}
+
 		return ret;
-	}
 
-	private int getChargeToPrint(List<QuantifiedPSMInterface> psms) {
-		int charge = -1;
-		for (final QuantifiedPSMInterface psm : psms) {
-			if (charge == -1) {
-				charge = psm.getChargeState();
-			}
-			if (psm.getChargeState() != charge) {
-				throw new IllegalArgumentException(
-						"Incosistency. GRoupping by sequence and charge is not properly done!");
-			}
-		}
-		return charge;
-	}
-
-	private List<String> getAccToPrint(List<QuantifiedPSMInterface> psms) {
-		final List<String> ret = new ArrayList<String>();
-		for (final QuantifiedPSMInterface psm : psms) {
-			final Set<QuantifiedProteinInterface> proteins = psm.getQuantifiedProteins();
-			for (final QuantifiedProteinInterface protein : proteins) {
-				if (!ret.contains(protein.getAccession())) {
-					ret.add(protein.getAccession());
-				}
-			}
-		}
-		return ret;
-	}
-
-	private void printOutputLine(FileWriter fw, QuantificationLabel label, double intensity, String acc, int charge,
-			String peptideSequence, String psm, String run) throws IOException {
-		final ExperimentalDesign experimentalDesign = getExperimentalDesign();
-		final Mixture mixture = experimentalDesign.getMixtureByRun(run);
-		final Float channel = mixture.getChannelByLabel(label);
-		final QuantCondition condition = mixture.getConditionsByLabels().get(label);
-
-		final String techRepMixture = experimentalDesign.getTechRepMixtureByRun(run);
-		final String bioReplicate = experimentalDesign.getBioReplicate(channel, techRepMixture, mixture.getName());
-		final String channelString = Float.valueOf(channel).toString();
-
-		fw.write(acc + "\t" + peptideSequence + "\t" + charge + "\t" + psm + "\t" + mixture.getName() + "\t"
-				+ techRepMixture + "\t" + run + "\t" + channelString + "\t" + condition.getName() + "\t" + bioReplicate
-				+ "\t" + intensity + "\n");
-
-	}
-
-	private File getOutputFile() {
-		return new File(this.inputFiles.get(0).getParent() + File.separator
-				+ FilenameUtils.getBaseName(this.inputFiles.get(0).getAbsolutePath()) + SUFFIX);
-	}
-
-	private ExperimentalDesign getExperimentalDesign() throws IOException {
-		if (ed == null) {
-			ed = new ExperimentalDesign(experimentalDesignFile, experimentalDesignSeparator);
-
-		}
-		return ed;
 	}
 
 	public static AppVersion getVersion() {
@@ -520,40 +491,96 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 		final List<Option> options = new ArrayList<Option>();
 
 		// add t option
-		final Option option1 = new Option("i", "input", true,
-				"Path to the input file(s). It can refer to multiple files by using wildcard '*', i.e: '/path/to/my/files/census*.out'");
-		option1.setRequired(true);
-		options.add(option1);
-		final Option option2 = new Option("an", "annotation", true, "Path to the experimental design file.");
-		option2.setRequired(true);
-		options.add(option2);
+		final Option optionInputFile = new Option("input", true,
+				"Path to the input file(s). It can refer to multiple files by using wildcards ('*'), i.e: '/path/to/my/files/census*.out'");
+		optionInputFile.setRequired(true);
+		options.add(optionInputFile);
 
-		final Option option3 = new Option("ps", "psm_selection", true,
-				"[OPTIONAL] What to do with multiple PSMs of the same peptide (SUM, AVERAGE or HIGHEST). If not provided, HIGHEST will be choosen.");
-		options.add(option3);
+		// in case of wanting MSstatsTMT output
+		final Option optionMSstats = new Option("msstats", false, "Create output to use in MSstatsTMT.");
+		options.add(optionMSstats);
 
-		final Option option4 = new Option("u", "unique", false,
-				"[OPTIONAL] Use only unique peptides. If not provided, all peptides will be used.");
-		options.add(option4);
+		final Option optionAnnotation = new Option("annotation", true,
+				"Path to the experimental design file. Option required if 'msstats' is selected. "
+						+ "Wildcards ('*') can be used, but only when refering to 1 file, i.e: '/path/to/my/files/annotation*.txt");
+		options.add(optionAnnotation);
 
-		final Option option5 = new Option("r", "raw", false,
-				"[OPTIONAL] Use of raw intensity. If not provided, normalized intensity will be used.");
-		options.add(option5);
+		final Option optionPTM = new Option("ptms", true,
+				"Comma separated list of masses corresponding to the PTMs that we want to use to aggregate quant values (instead of peptides)");
+		options.add(optionPTM);
 
-		final Option option6 = new Option("d", "decoy", true,
-				"[OPTIONAL] Remove decoy hits. Decoys hits will have this prefix in their accession number. If not provided, no decoy filtering will be used.");
-		options.add(option6);
+		final Option optionFasta = new Option("fasta", true,
+				"Full path to a fasta file used for getting the protein sequences for a ptm-based analysis. "
+						+ "This option will be ignored if 'ptms' is empty. "
+						+ "If not provided, or if proteins in input file are not found in this fasta file, the tool will try to get the protein sequence from UniprotKB in case of having Uniprot accessions."
+						+ " Wildcards ('*') can be used, but only when refering to 1 file, i.e: '/path/to/my/files/*.fasta");
+		options.add(optionFasta);
 
-		final Option option7 = new Option("m", "minPeptides", true,
-				"[OPTIONAL] Minimum number of peptides+charge per protein. If not provided, even proteins with 1 peptide will be quantified");
-		options.add(option7);
+		final Option optionLuciphor = new Option("luciphor", true,
+				"Full path to the luciphor (PTM localization algorithm) results file. "
+						+ "Luciphor results will be merged with input data after applying some FDR cutoffs."
+						+ " Wildcards ('*') can be used, but only when refering to 1 file, i.e: '/path/to/my/files/luciphor*.txt");
+		optionLuciphor.setRequired(false);
+		options.add(optionLuciphor);
+
+		final Option optionLFDR = new Option("luc_lfdr", true,
+				"In case of providing a luciphor file, this paremeter specifies the local FDR threshold to apply. "
+						+ "All Luciphor results above that threshold will be ignored.");
+		options.add(optionLFDR);
+
+		final Option optionGFDR = new Option("luc_gfdr", true,
+				"In case of providing a luciphor file, this paremeter specifies the global FDR threshold to apply. "
+						+ "All Luciphor results above that threshold will be ignored.");
+		options.add(optionGFDR);
+
+		final Option optionPSMAggregation = new Option("aggregation", true,
+				"How to aggregate PSM intensities to peptide level. Valid values are: ["
+						+ PSMAggregationType.printValidValues() + "]. If not provided, " + PSMAggregationType.HIGHEST
+						+ " will be choosen.");
+		options.add(optionPSMAggregation);
+
+		final Option optionUnique = new Option("unique", false, "If selected, it will discard any non-unique peptide.");
+		options.add(optionUnique);
+
+		final Option optionRaw = new Option("raw", false,
+				"Use of raw intensity. If not provided, normalized intensity will be used.");
+		options.add(optionRaw);
+
+		final Option optionDecoy = new Option("decoy", true,
+				"Remove decoy proteins. Decoys proteins will have this prefix in their accession number. If not provided, no decoy filtering will be used.");
+		options.add(optionDecoy);
+
+		final Option optionSPC = new Option("min_spc", true,
+				"Minimum number of spectral counts. See 'spc_type' option to specify the behaviour of this filter.");
+		options.add(optionSPC);
+
+		final Option optionSPCType = new Option("spc_type", true,
+				"This parameter specifies at which level to apply the minimum number of spectral counts filter. "
+						+ "Valid values are: " + SPC_FILTER_TYPE.SEQUENCE.name() + " (peptide sequence with PTMs), "
+						+ SPC_FILTER_TYPE.ION.name() + " (peptide sequence with PTMs plus charge) or "
+						+ SPC_FILTER_TYPE.PROTEIN_SITE.name()
+						+ " (protein site in case of being a PTM-based analysis). " + "If not provided, "
+						+ SPC_FILTER_TYPE.ION.name()
+						+ " will be used. If 'min_spc' is empty, this parameter will be ignored.");
+		options.add(optionSPCType);
+
+		final Option optionTMTPurity = new Option("tmt_purity", true, "Minimum TMT purity value per PSM.");
+		options.add(optionTMTPurity);
+
+		final Option optionOutputPrefix = new Option("output_prefix", true,
+				"Prefix added to all the output files generated. If not provided, the name of the first input input will be used as prefix.");
+		options.add(optionOutputPrefix);
+
+		final Option optionCreateExcel = new Option("excel", false,
+				"If selected, an Excel file will be created compiling all the other text output files in different sheets.");
+		options.add(optionCreateExcel);
 		return options;
 	}
 
 	@Override
 	public void run() {
 		try {
-			runConversion();
+			runConversionToMSstatsTMT();
 		} catch (final Exception e) {
 			e.printStackTrace();
 			throw new RuntimeException(e);
@@ -567,17 +594,22 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 
 	@Override
 	protected void initToolFromCommandLineOptions(CommandLine cmd) throws SomeErrorInParametersOcurred {
-		File inputFile = null;
-		File experimentalDesignFile = null;
-		final String experimentalDesignSeparator = ",";
-		boolean uniquePeptides = false;
-		boolean useRawIntensity = false;
-		String decoyPrefix = null;
-		PSMSelectionType psmSelection = PSMSelectionType.HIGHEST;
-		if (cmd.hasOption("i")) {
-			this.inputFiles = new ArrayList<File>();
-			final String iOptionValue = cmd.getOptionValue("i");
-			inputFile = new File(iOptionValue);
+		FilesManager.clearStaticData();
+		LuciphorIntegrator.clearDataStatic();
+		PTMList.getInstance().clearData();
+		experimentalDesignFile = null;
+		uniquePeptides = false;
+		useRawIntensity = false;
+		decoyPrefix = null;
+		psmSelection = PSMAggregationType.HIGHEST;
+
+		fastaFile = null;
+
+		List<File> inputFiles = null;
+		if (cmd.hasOption("input")) {
+			inputFiles = new ArrayList<File>();
+			final String iOptionValue = cmd.getOptionValue("input");
+			File inputFile = new File(iOptionValue);
 			final File parentFile = inputFile.getParentFile();
 			if (parentFile == null && !inputFile.exists()) {
 				inputFile = new File(System.getProperty("user.dir") + File.separator + iOptionValue);
@@ -586,14 +618,12 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			if (!inputFile.exists()) {
 				// check whether is using a wildcard in the name
 				if (iOptionValue.matches(".*\\*.*")) {
-					final List<File> inputFiles = getMultipleFiles(parentFile, iOptionValue);
+					inputFiles = FilesManager.getMultipleFiles(parentFile, iOptionValue);
 					if (inputFiles.isEmpty()) {
-						errorInParameters("Input files '-i " + iOptionValue + "' don't exist or are not found");
-					} else {
-						this.inputFiles.addAll(inputFiles);
+						errorInParameters("Input files '-input " + iOptionValue + "' don't exist or are not found");
 					}
 				} else {
-					errorInParameters("Input file '-i " + iOptionValue + "' doesn't exist or is not found");
+					errorInParameters("Input file '-input " + iOptionValue + "' doesn't exist or is not found");
 				}
 			} else {
 				inputFiles.add(inputFile);
@@ -602,7 +632,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			errorInParameters("Input file is missing");
 		}
 		String plural = "";
-		if (this.inputFiles.size() > 1) {
+		if (inputFiles.size() > 1) {
 			plural += "s";
 		}
 		System.out.println("Input file" + plural + ":");
@@ -610,83 +640,233 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 		for (final File file : inputFiles) {
 			System.out.println(i++ + "- " + file.getAbsolutePath() + "'");
 		}
-		if (cmd.hasOption("an")) {
-			final String anOptionValue = cmd.getOptionValue("an");
-			experimentalDesignFile = new File(anOptionValue);
-			final File parentFile = experimentalDesignFile.getParentFile();
-			if (parentFile == null || !experimentalDesignFile.exists()) {
-				experimentalDesignFile = new File(System.getProperty("user.dir") + File.separator + anOptionValue);
+		// output prefix
+		this.outputPrefix = null;
+		if (cmd.hasOption("output_prefix")) {
+			this.outputPrefix = cmd.getOptionValue("output_prefix").trim();
+			if ("".equals(this.outputPrefix)) {
+				this.outputPrefix = null;
 			}
+		}
+		if (outputPrefix == null) {
+			this.outputPrefix = FilenameUtils.getBaseName(inputFiles.get(0).getAbsolutePath());
+			System.out.println("Option '-output_prefix' not provided. Using prefix '" + this.outputPrefix
+					+ "' for all output files.");
+		}
+		FilesManager.getNewInstance(inputFiles, outputPrefix);
+		//
+		this.msstatsoutput = false;
+		if (cmd.hasOption("msstats")) {
+			msstatsoutput = true;
+		}
+		//
+		if (this.msstatsoutput) {
+			if (cmd.hasOption("annotation")) {
+				final String anOptionValue = cmd.getOptionValue("annotation");
+				experimentalDesignFile = new File(anOptionValue);
+				final File parentFile = experimentalDesignFile.getParentFile();
+				if (parentFile == null || !experimentalDesignFile.exists()) {
+					experimentalDesignFile = new File(System.getProperty("user.dir") + File.separator + anOptionValue);
+				}
 
-			if (!experimentalDesignFile.exists()) {
-				errorInParameters("Annotation file (experimental design) '-an " + anOptionValue
-						+ "' doesn't exist or is not found");
+				if (!experimentalDesignFile.exists()) {
+					errorInParameters("Annotation file (experimental design) '-annotation " + anOptionValue
+							+ "' doesn't exist or is not found");
+				}
+			} else {
+				errorInParameters(
+						"Experimental design file is missing and it is required if option -msstats is selected");
 			}
 		} else {
-			errorInParameters("Experimental design file is missing");
+			if (cmd.hasOption("annotation")) {
+				System.out.println("Option -annotation ignored");
+			}
 		}
-		if (cmd.hasOption("ps")) {
+		//
+
+		if (cmd.hasOption("ptms")) {
+			final String ptmsString = cmd.getOptionValue("ptms").trim();
 			try {
-				psmSelection = PSMSelectionType.valueOf(cmd.getOptionValue("ps"));
+				final List<Float> ptms = parsePTMsString(ptmsString);
+				PTMList.getInstance().addAll(ptms);
+			} catch (final NumberFormatException e) {
+				errorInParameters("Error in '-ptms' option. Only a comma separated list of real numbers is valid");
+			}
+		}
+//		if (!PTMList.getInstance().isEmpty()) {
+		if (cmd.hasOption("fasta")) {
+			final String fastaFilePath = cmd.getOptionValue("fasta").trim();
+			fastaFile = new File(fastaFilePath);
+			final File parentFile = fastaFile.getParentFile();
+			if (parentFile == null && !fastaFile.exists()) {
+				fastaFile = new File(System.getProperty("user.dir") + File.separator + fastaFilePath);
+			}
+			if (!fastaFile.exists()) {
+				if (fastaFilePath.matches(".*\\*.*")) {
+					final List<File> fastaFiles = FilesManager.getMultipleFiles(parentFile, fastaFilePath);
+					if (fastaFiles.isEmpty()) {
+						errorInParameters("Fasta file '-fasta " + fastaFilePath + "' don't exist or is not found");
+					} else if (fastaFiles.size() > 1) {
+						errorInParameters(
+								"Option '-fasta " + fastaFilePath + "' refers to more than one file in the folder");
+					} else {
+						this.fastaFile = fastaFiles.get(0);
+					}
+				} else {
+					errorInParameters("Fasta file '" + fastaFile.getAbsolutePath() + "' is not found");
+				}
+			}
+		} else {
+			if (!PTMList.getInstance().isEmpty()) {
+				System.out.println(
+						"Fasta file not provided when using '-ptms' option. Protein sequences will be retrieved from Uniprot if possible...");
+			}
+		}
+//		} else {
+//			System.out.println("Option -fasta ignored");
+//		}
+		//
+		if (cmd.hasOption("aggregation")) {
+			try {
+				psmSelection = PSMAggregationType.valueOf(cmd.getOptionValue("aggregation"));
 			} catch (final Exception e) {
 				e.printStackTrace();
-				errorInParameters("option 'ps' ('" + cmd.getOptionValue("ps") + "') is not valid. Valid values are "
-						+ PSMSelectionType.printValidValues());
+				errorInParameters("option 'aggregation' ('" + cmd.getOptionValue("aggregation")
+						+ "') is not valid. Valid values are " + PSMAggregationType.printValidValues());
 			}
 
 		}
 		log.info("Using ps option " + psmSelection);
+		this.luciphorFile = null;
+		//
+		if (cmd.hasOption("luciphor")) {
+			final String luciphorFilePath = cmd.getOptionValue("luciphor");
+			luciphorFile = new File(luciphorFilePath);
+			final File parentFile = luciphorFile.getParentFile();
+			if (parentFile == null && !luciphorFile.exists()) {
+				luciphorFile = new File(System.getProperty("user.dir") + File.separator + luciphorFilePath);
+			}
+			if (!luciphorFile.exists()) {
+				if (luciphorFilePath.matches(".*\\*.*")) {
+					final List<File> luciphorFiles = FilesManager.getMultipleFiles(parentFile, luciphorFilePath);
+					if (luciphorFiles.isEmpty()) {
+						errorInParameters(
+								"Luciphor file '-luciphor " + luciphorFilePath + "' don't exist or is not found");
+					} else if (luciphorFiles.size() > 1) {
+						errorInParameters("Option '-luciphor " + luciphorFilePath
+								+ "' refers to more than one file in the folder");
+					} else {
+						luciphorFile = luciphorFiles.get(0);
+					}
+				} else {
+					errorInParameters("Luciphor file '" + luciphorFile.getAbsolutePath() + "' not found");
+				}
+			}
+		}
+		//
+		if (luciphorFile != null && luciphorFile.exists()) {
 
-		if (cmd.hasOption("u")) {
+			if (cmd.hasOption("luc_lfdr")) {
+				try {
+					this.luciphorLocalFDRThreshold = Float.valueOf(cmd.getOptionValue("luc_lfdr"));
+				} catch (final NumberFormatException e) {
+					errorInParameters("Local FDR threshold has to be a real number");
+				}
+			}
+			//
+			if (cmd.hasOption("luc_gfdr")) {
+				try {
+					this.luciphorGlobalFDRThreshold = Float.valueOf(cmd.getOptionValue("luc_gfdr"));
+				} catch (final NumberFormatException e) {
+					errorInParameters("Global FDR threshold has to be a real number");
+				}
+			}
+		} else {
+			if (cmd.hasOption("luc_lfdr")) {
+
+				System.out.println("Option '-luc_lfdr' ignored.");
+			}
+			if (cmd.hasOption("luc_gfdr")) {
+				System.out.println("Option '-luc_gfdr' ignored.");
+			}
+
+		}
+		//
+		if (cmd.hasOption("unique")) {
 			uniquePeptides = true;
 			log.info("Using only unique peptides.");
 		} else {
 			log.info("Using all peptides regardless of their uniqueness.");
 		}
-
-		if (cmd.hasOption("r")) {
+		//
+		if (cmd.hasOption("raw")) {
 			useRawIntensity = true;
 			log.info("Using raw intensities.");
 		} else {
 			log.info("Using normalized intensities.");
 		}
 
-		if (cmd.hasOption("d")) {
-			decoyPrefix = cmd.getOptionValue("d");
+		if (cmd.hasOption("decoy")) {
+			decoyPrefix = cmd.getOptionValue("decoy");
 			if ("".equals(decoyPrefix)) {
 				decoyPrefix = null;
 			}
+			log.info("Using d option for decoy prefix='" + decoyPrefix + "'");
 		}
-		int minNumPeptides = 0;
-		if (cmd.hasOption("m")) {
-			minNumPeptides = Integer.valueOf(cmd.getOptionValue("m"));
+		minSPC = null;
+		if (cmd.hasOption("min_spc")) {
+			try {
+				minSPC = Integer.valueOf(cmd.getOptionValue("min_spc"));
+				if (minSPC < 0) {
+					throw new NumberFormatException();
+				}
+			} catch (final NumberFormatException e) {
+				errorInParameters("Option '-min_spc' should have a positive integer");
+			}
 		}
-		log.info("Using d option for decoy prefix='" + decoyPrefix + "'");
-		this.experimentalDesignFile = experimentalDesignFile;
-		this.experimentalDesignSeparator = experimentalDesignSeparator;
-		this.uniquePeptides = uniquePeptides;
-		this.useRawIntensity = useRawIntensity;
-		this.decoyPrefix = decoyPrefix;
-		this.psmSelection = psmSelection;
-		this.minNumPeptides = minNumPeptides;
+		if (cmd.hasOption("spc_type")) {
+			spcFilterType = SPC_FILTER_TYPE.getValueOf(cmd.getOptionValue("spc_type"));
+			if (spcFilterType == null) {
+				errorInParameters("Spectral count filter type can only be one of these values: "
+						+ SPC_FILTER_TYPE.getValuesString(", "));
+			}
+
+		} else {
+			if (this.minSPC != null) {
+				errorInParameters("Option '-spc_type' is missing");
+			} else {
+				this.spcFilterType = SPC_FILTER_TYPE.ION;
+			}
+		}
+		//
+		if (cmd.hasOption("pur")) {
+			try {
+				minPurity = Float.valueOf(cmd.getOptionValue("pur"));
+
+			} catch (final NumberFormatException e) {
+				errorInParameters("Minimum TMT purity has to be a number");
+			}
+		} else {
+			minPurity = null;
+		}
+		this.createExcelFile = false;
+		if (cmd.hasOption("excel")) {
+			this.createExcelFile = true;
+		}
 	}
 
-	private List<File> getMultipleFiles(File parentFolder, String iOptionValue) {
-		final DirectoryScanner scanner = new DirectoryScanner();
-		final String[] includes = new String[] { FilenameUtils.getName(iOptionValue) };
-		scanner.setIncludes(includes);
-		scanner.setBasedir(parentFolder);
-		scanner.setCaseSensitive(false);
-		scanner.scan();
-		final String[] files = scanner.getIncludedFiles();
-		final List<File> ret = new ArrayList<File>();
-		for (final String fileFullPath : files) {
-			if (FilenameUtils.getName(fileFullPath).endsWith(SUFFIX)) {
-				System.out.println("Ignoring file matching -i parameter: '" + fileFullPath + "'");
-				continue;
+	private List<Float> parsePTMsString(String ptmsString) {
+		final List<Float> ret = new ArrayList<Float>();
+		if (ptmsString.contains(",")) {
+			final String[] split = ptmsString.split(",");
+			for (final String ptmString : split) {
+				ret.add(Float.valueOf(ptmString.trim()));
 			}
-			ret.add(new File(parentFolder.getAbsolutePath() + File.separator + fileFullPath));
-
+		} else {
+			ret.add(Float.valueOf(ptmsString.trim()));
+		}
+		if (ret.isEmpty()) {
+			return null;
 		}
 		return ret;
 	}
