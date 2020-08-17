@@ -121,10 +121,10 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			// 1- get conditions and labels
 			final Map<QuantificationLabel, QuantCondition>[] conditionsByLabelsList = getConditionsByLabelsArray(
 					FilesManager.getInstance().getInputFiles(), ed);
-			String plural = "";
-			if (FilesManager.getInstance().getInputFiles().size() > 1) {
-				plural = "s";
-			}
+
+			// check whether multiple mixtures have different experimental designs or not
+			final boolean multipleMixturesWithDifferentExperimentalDesigns = checkMixtureExperimentalDesigns(
+					conditionsByLabelsList);
 
 			// 2- read input files with parser
 
@@ -148,6 +148,10 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 				System.out.println("4-Plex detected.");
 				labels = QuantificationLabel.getTMT4PlexLabels();
 			}
+			String plural = "";
+			if (FilesManager.getInstance().getInputFiles().size() > 1) {
+				plural = "s";
+			}
 			System.out.println("Reading input file" + plural + "...");
 			// 3- map genes to proteins from protein descriptions in proteins
 			final Collection<QuantifiedProteinInterface> proteins = parser.getProteinMap().values();
@@ -163,8 +167,8 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 
 			// 4- merge psms with luciphor ones
 			if (luciphorFile != null) {
-				LuciphorIntegrator.getInstance(luciphorFile).mergeWithLuciphor(psms, luciphorLocalFDRThreshold,
-						luciphorGlobalFDRThreshold);
+				final LuciphorIntegrator luciphorIntegrator = LuciphorIntegrator.getInstance(luciphorFile);
+				luciphorIntegrator.mergeWithLuciphor(psms, luciphorLocalFDRThreshold, luciphorGlobalFDRThreshold);
 			}
 
 			// 5- group proteins so that we can remove non conclusive ones
@@ -293,7 +297,9 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 
 			// 11- print MSstatsTMT file
 			if (this.msstatsoutput) {
-				FilesManager.getInstance().printMSstatsTMTFFile(psms, ed, this.useRawIntensity, this.psmSelection);
+				final boolean aggregateByPTMs = !PTMList.getInstance().isEmpty();
+				FilesManager.getInstance().printMSstatsTMTFFile(psms, ed, this.useRawIntensity, this.psmSelection,
+						aggregateByPTMs);
 			}
 
 			// 12- print peptide level file
@@ -314,6 +320,22 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 				throw e;
 			}
 		}
+	}
+
+	private boolean checkMixtureExperimentalDesigns(Map<QuantificationLabel, QuantCondition>[] conditionsByLabelsList) {
+		// first we check if the plexes are equal, if not we throw exception
+		int n = -1;
+		for (final Map<QuantificationLabel, QuantCondition> map : conditionsByLabelsList) {
+			if (n == -1) {
+				n = map.size();
+			} else {
+				if (n != map.size()) {
+					throw new IllegalArgumentException("Different Plexes detected in input files");
+				}
+			}
+		}
+
+		return true;
 	}
 
 	private void setMissingIntensityValuesTo1(List<QuantifiedPSMInterface> psms, List<QuantificationLabel> labels) {

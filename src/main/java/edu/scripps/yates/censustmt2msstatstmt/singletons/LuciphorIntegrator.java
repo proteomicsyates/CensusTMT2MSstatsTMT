@@ -31,7 +31,7 @@ public class LuciphorIntegrator implements Clearable {
 	}
 
 	public static LuciphorIntegrator getInstance(File luciphorFile) {
-		if (instance != null) {
+		if (instance == null) {
 			instance = new LuciphorIntegrator(luciphorFile);
 		}
 		return instance;

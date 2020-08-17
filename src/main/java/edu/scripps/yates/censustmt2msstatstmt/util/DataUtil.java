@@ -125,7 +125,7 @@ public class DataUtil {
 		if (primaryProteins != null) {
 			primaryAccs = primaryProteins.stream().map(p -> p.getAccession()).collect(Collectors.toSet());
 		}
-		final List<String> ret = new ArrayList<String>();
+		final List<String> retTMP = new ArrayList<String>();
 		for (final PTMInProtein ptmInProtein : ptmsInProtein) {
 			if (primaryAccs != null && !primaryAccs.contains(ptmInProtein.getProteinACC())) {
 				continue;
@@ -149,8 +149,23 @@ public class DataUtil {
 				if (gene == null) {
 					gene = ptmInProtein.getProteinACC();
 				}
-				ret.add(gene + "_" + ptmInProtein.getAa() + ptmInProtein.getPosition());
+				retTMP.add(gene + "_" + ptmInProtein.getAa() + ptmInProtein.getPosition());
 			}
+		}
+
+		// now we check whether we can merge some elements from the same protein/gene
+		final List<String> ret = new ArrayList<String>();
+		String currentProtein = null;
+		for (final String string : retTMP) {
+			final String protein = string.substring(0, string.indexOf("_"));
+			if (protein.equals(currentProtein)) {
+				final String newString = ret.get(ret.size() - 1) + "_" + string.substring(string.indexOf("_") + 1);
+				ret.set(ret.size() - 1, newString);
+			} else {
+				currentProtein = protein;
+				ret.add(string);
+			}
+
 		}
 		return ret;
 	}
@@ -509,6 +524,14 @@ public class DataUtil {
 				}
 				ret.get(qamount.getLabel()).add(qamount);
 			}
+		}
+		return ret;
+	}
+
+	public static Set<ProteinGroup> getGroups(List<QuantifiedPSMInterface> psms) {
+		final Set<ProteinGroup> ret = new THashSet<ProteinGroup>();
+		for (final QuantifiedPSMInterface psm : psms) {
+			psm.getProteins().forEach(protein -> ret.add(protein.getProteinGroup()));
 		}
 		return ret;
 	}
