@@ -76,6 +76,8 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 
 	private boolean createExcelFile;
 
+	private boolean simplifyProteinGroups;
+
 //	public CensusTMT2MSstatsTMT(File inputFile, File experimentalDesignFile, String experimentalDesignSeparator,
 //			boolean uniquePeptides, boolean useRawIntensity, String decoyPrefix, PSMSelectionType psmSelection) {
 //		super(null);// we dont use that functionality to create GUI here
@@ -299,7 +301,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			if (this.msstatsoutput) {
 				final boolean aggregateByPTMs = !PTMList.getInstance().isEmpty();
 				FilesManager.getInstance().printMSstatsTMTFFile(psms, ed, this.useRawIntensity, this.psmSelection,
-						aggregateByPTMs);
+						aggregateByPTMs, simplifyProteinGroups);
 			}
 
 			// 12- print peptide level file
@@ -596,6 +598,10 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 		final Option optionCreateExcel = new Option("excel", false,
 				"If selected, an Excel file will be created compiling all the other text output files in different sheets.");
 		options.add(optionCreateExcel);
+
+		final Option simplyProteinGroups = new Option("simplify_protein_groups", false,
+				"If selected, protein accessions of a group will be simplified (if possible) to show only protein accession from UniprotKB SwissProt, ignoring accession from UniprotKB TrEmBML.");
+		options.add(simplyProteinGroups);
 		return options;
 	}
 
@@ -874,6 +880,10 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 		this.createExcelFile = false;
 		if (cmd.hasOption("excel")) {
 			this.createExcelFile = true;
+		}
+		this.simplifyProteinGroups = false;
+		if (cmd.hasOption("simplify_protein_groups")) {
+			this.simplifyProteinGroups = true;
 		}
 	}
 
