@@ -29,6 +29,7 @@ import edu.scripps.yates.censustmt2msstatstmt.util.DataUtil;
 import edu.scripps.yates.utilities.dates.DatesUtil;
 import edu.scripps.yates.utilities.files.FileUtils;
 import edu.scripps.yates.utilities.grouping.ProteinGroup;
+import edu.scripps.yates.utilities.proteomicsmodel.utils.KeyUtils;
 import edu.scripps.yates.utilities.sequence.PTMInProtein;
 import edu.scripps.yates.utilities.strings.StringUtils;
 import gnu.trove.map.hash.THashMap;
@@ -196,14 +197,19 @@ public class FilesManager implements Clearable {
 		return inputFiles;
 	}
 
-	public File printDiscardedList(Set<String> discardedIons, SPC_FILTER_TYPE spcFilterType, int minSPC) {
-		final File outputFile = printList(discardedIons, "_discarded_" + minSPC + "SpCper" + spcFilterType.name());
+	public File printDiscardedListByIons(Set<String> discardedKeys, String filterType, int minIons) {
+		final File outputFile = printList(discardedKeys, "_discarded_" + minIons + "Ionsper" + filterType);
+		return outputFile;
+	}
+
+	public File printDiscardedListBySPC(Set<String> discardedKeys, SPC_FILTER_TYPE spcFilterType, int minSPC) {
+		final File outputFile = printList(discardedKeys, "_discarded_" + minSPC + "SpCper" + spcFilterType.name());
 		return outputFile;
 	}
 
 	public void printPSMLevelFile(Collection<QuantifiedPSMInterface> psms, QuantParser parser,
 			List<QuantificationLabel> labels) throws IOException {
-		System.out.println("Printing PSM-level file");
+		System.out.println("Printing PSM-level file...");
 		final File outputFile = getPSMOutputFile();
 		final FileWriter fw = new FileWriter(outputFile);
 		// header
@@ -224,11 +230,19 @@ public class FilesManager implements Clearable {
 			fw.write("Luciphor localFDR\tLuciphor globalFDR\t");
 		}
 		fw.write("TMT_purity\tsignal to noise\tion count\tscan number\tfile name\n");
+		int numPSMs = 0;
 		for (final QuantifiedPSMInterface psm : psms) {
+			if (KeyUtils.getInstance().getSequenceChargeKey(psm, true, true)
+					.equals("TALPTSGSSAGELELLAGEVPARS(+79.966)PGAFDMSGVR-4")) {
+				System.out.println("asdf");
+			}
+			if (KeyUtils.getInstance().getSequenceChargeKey(psm, true, true).equals("S(+79.966)PGAFDMSGVR-4")) {
+				System.out.println("asdf");
+			}
 			if (psm.isDiscarded()) {
 				continue;
 			}
-
+			numPSMs++;
 			final StringBuilder sb = new StringBuilder();
 			final Set<ProteinGroup> groups = DataUtil.getGroups(psm);
 			// accs and genes
@@ -249,11 +263,7 @@ public class FilesManager implements Clearable {
 					sitesWithGenes = DataUtil.getGenesString(groups);
 				}
 				sb.append(sitesWithAccs).append("\t");
-
 				sb.append(sitesWithGenes).append("\t");
-				if (sitesWithGenes.equals("ATP1B1_Y204,ATP1B1_T214")) {
-					log.info("asdf");
-				}
 			} else {
 				sb.append(DataUtil.getProteinGroupAccessionString(groups)).append("\t");
 				// genes
@@ -263,7 +273,7 @@ public class FilesManager implements Clearable {
 			// descriptions
 			sb.append(DataUtil.getDescriptionString(groups)).append("\t");
 			// primary acc and primary gene
-			final List<QuantifiedProteinInterface> primaryProteins = DataUtil.getPrimaryProtein(groups);
+			final List<QuantifiedProteinInterface> primaryProteins = DataUtil.getPrimaryProteins(groups);
 
 			if (!PTMList.getInstance().isEmpty()) {
 				String sitesWithAccs = "";
@@ -330,7 +340,7 @@ public class FilesManager implements Clearable {
 		}
 		fw.close();
 		addOutputFile(outputFile, "psm-level");
-		System.out.println("File created at " + outputFile.getAbsolutePath());
+		System.out.println("File created at '" + outputFile.getAbsolutePath() + "' with " + numPSMs + " PSMs");
 	}
 
 	@Override
@@ -355,17 +365,21 @@ public class FilesManager implements Clearable {
 			fw.write("\t" + label.name());
 		}
 		fw.write("\n");
+		int numPeptides = 0;
 		for (final QuantifiedPeptideInterface peptide : peptides) {
 			final boolean hasValidPSMs = peptide.getQuantifiedPSMs().stream().filter(psm -> !psm.isDiscarded())
 					.findAny().isPresent();
 			if (!hasValidPSMs) {
 				continue;
 			}
+			numPeptides++;
 			// filter by psms
 			final int numPSMs = (int) peptide.getQuantifiedPSMs().stream().filter(p -> !p.isDiscarded()).count();
 
 			final StringBuilder sb = new StringBuilder();
 			final Set<ProteinGroup> groups = DataUtil.getGroups(peptide);
+
+			final List<QuantifiedProteinInterface> primaryProteins = DataUtil.getPrimaryProteins(groups);
 			// acc
 			if (!PTMList.getInstance().isEmpty()) {
 				String sitesWithAccs = "";
@@ -376,7 +390,7 @@ public class FilesManager implements Clearable {
 					final List<String> proteinSiteKeys = DataUtil.getProteinSiteKeys(ptMsInProtein, false, null);
 					sitesWithAccs = StringUtils.getSeparatedValueStringFromChars(proteinSiteKeys.toArray(), ",");
 					final List<String> proteinSiteKeysWithGenes = DataUtil.getProteinSiteKeys(ptMsInProtein, true,
-							null);
+							primaryProteins);
 					sitesWithGenes = StringUtils.getSeparatedValueStringFromChars(proteinSiteKeysWithGenes.toArray(),
 							",");
 				} catch (final IllegalArgumentException e) {
@@ -394,7 +408,6 @@ public class FilesManager implements Clearable {
 			// descriptions
 			sb.append(DataUtil.getDescriptionString(groups)).append("\t");
 			// primary acc and gene
-			final List<QuantifiedProteinInterface> primaryProteins = DataUtil.getPrimaryProtein(groups);
 			if (!PTMList.getInstance().isEmpty()) {
 				String sitesWithAccs = "";
 				String sitesWithGenes = "";
@@ -435,9 +448,8 @@ public class FilesManager implements Clearable {
 			fw.write(sb.toString());
 		}
 		fw.close();
-
-		System.out.println("File created at " + outputFile.getAbsolutePath());
 		FilesManager.getInstance().addOutputFile(outputFile, "peptide-level");
+		System.out.println("File created at '" + outputFile.getAbsolutePath() + "' with " + numPeptides + " peptides.");
 
 	}
 
@@ -453,10 +465,112 @@ public class FilesManager implements Clearable {
 		return sb.toString();
 	}
 
-	public void printMSstatsTMTFFile(List<QuantifiedPSMInterface> psms, ExperimentalDesign experimentalDesign,
-			boolean useRawIntensity, PSMAggregationType psmSelection) throws IOException {
+	private void printMSstatsTMTFFileAggregatingByPTMs(List<QuantifiedPSMInterface> psms,
+			ExperimentalDesign experimentalDesign, boolean useRawIntensity, PSMAggregationType psmSelection,
+			boolean simplifyProteinGroups) throws IOException {
 		final File outputFile = FilesManager.getInstance().getMSStatsOutputFile();
 		FileWriter fw = null;
+		int numIntensities = 0;
+		final Set<String> proteinSites = new THashSet<String>();
+		try {
+			fw = new FileWriter(outputFile);
+			System.out.println("Printing MSstatsTMT input file...");
+			// header
+			fw.write(
+					"ProteinName\tPeptideSequence\tCharge\tPSM\tMixture\tTechRepMixture\tRun\tChannel\tCondition\tBioReplicate\tIntensity\n");
+
+			// create a map by sequence + charge
+			final Map<String, List<QuantifiedPSMInterface>> psmsBySequenceAndCharge = new THashMap<String, List<QuantifiedPSMInterface>>();
+			for (final QuantifiedPSMInterface psm : psms) {
+				if (psm.getScanNumber().equals("48837") || psm.getScanNumber().equals("43349")) {
+					System.out.println("asdf");
+				}
+				if (psm.isDiscarded()) {
+					continue;
+				}
+				final String seq = psm.getFullSequence() + "_" + psm.getChargeState();
+
+				if (!psmsBySequenceAndCharge.containsKey(seq)) {
+					psmsBySequenceAndCharge.put(seq, new ArrayList<QuantifiedPSMInterface>());
+				}
+				psmsBySequenceAndCharge.get(seq).add(psm);
+			}
+
+			// iterate over it. Sort first the sequences so that they will appear in order
+			// in the output
+			final Set<String> seqsSet = psmsBySequenceAndCharge.keySet();
+			final List<String> seqList = seqsSet.stream().sorted().collect(Collectors.toCollection(ArrayList::new));
+			for (final String seq : seqList) {
+				if (seq.equals("EEEWDPEYT(+79.966)PK_3")) {
+					System.out.println("asdf");
+				}
+				final List<QuantifiedPSMInterface> psmsOfSeq = psmsBySequenceAndCharge.get(seq);
+
+				final Set<String> runs = psmsOfSeq.stream().map(psm -> psm.getMSRun().getRunId())
+						.collect(Collectors.toSet());
+				for (final String run : runs) {
+					final List<QuantifiedPSMInterface> psmsOfSeqAndRun = psmsOfSeq.stream()
+							.filter(psm -> psm.getMSRun().getRunId().equals(run)).collect(Collectors.toList());
+					final int charge = DataUtil.getChargeToPrint(psmsOfSeqAndRun);
+					final Map<QuantificationLabel, Double> intensities = DataUtil.getIntensitiesToPrint(psmsOfSeqAndRun,
+							psmSelection, useRawIntensity);
+					final QuantifiedPSMInterface firstPSM = psmsOfSeqAndRun.get(0); // all have the same sequence and
+																					// charge so we can get just one
+					final List<PTMInProtein> ptMsInProtein = firstPSM.getPTMsInProtein(UPLR.getInstance(),
+							ProteinSequences.getInstance());
+					String proteinSiteKey = null;
+					List<QuantifiedProteinInterface> primaryProteins = null;
+					if (simplifyProteinGroups) {
+						primaryProteins = DataUtil.getPrimaryProteins(DataUtil.getGroups(firstPSM));
+					}
+					final List<String> proteinSiteKeys = DataUtil.getProteinSiteKeys(ptMsInProtein, false,
+							primaryProteins);
+					proteinSiteKey = StringUtils.getSortedSeparatedValueStringFromChars(proteinSiteKeys,
+							DataUtil.SEPARATOR);
+
+					proteinSites.add(proteinSiteKey);
+					final String peptideSequence = firstPSM.getFullSequence();
+					final String psm = peptideSequence + "_" + charge;
+
+					for (final QuantificationLabel label : intensities.keySet().stream().sorted()
+							.collect(Collectors.toList())) {
+						numIntensities++;
+						printMSstatsTMTOutputLine(fw, label, intensities.get(label), proteinSiteKey, charge,
+								peptideSequence, psm, run, experimentalDesign);
+					}
+				}
+			}
+
+		} finally {
+			if (fw != null) {
+				fw.close();
+				log.info("File written at " + outputFile.getAbsolutePath());
+				System.out.println("File created at '" + outputFile.getAbsolutePath() + "' with " + numIntensities
+						+ " intensities and " + proteinSites.size()
+						+ " different protein sites (or combinations of them)");
+				addOutputFile(outputFile, "MSstatsTMT");
+			}
+		}
+	}
+
+	public void printMSstatsTMTFFile(List<QuantifiedPSMInterface> psms, ExperimentalDesign experimentalDesign,
+			boolean useRawIntensity, PSMAggregationType psmSelection, boolean aggregatingByPTMs,
+			boolean simplifyProteinGroups) throws IOException {
+		if (aggregatingByPTMs) {
+			printMSstatsTMTFFileAggregatingByPTMs(psms, experimentalDesign, useRawIntensity, psmSelection,
+					simplifyProteinGroups);
+		} else {
+			printMSstatsTMTFFile(psms, experimentalDesign, useRawIntensity, psmSelection, simplifyProteinGroups);
+		}
+	}
+
+	private void printMSstatsTMTFFile(List<QuantifiedPSMInterface> psms, ExperimentalDesign experimentalDesign,
+			boolean useRawIntensity, PSMAggregationType psmSelection, boolean simplifyProteinGroups)
+			throws IOException {
+		final File outputFile = FilesManager.getInstance().getMSStatsOutputFile();
+		FileWriter fw = null;
+		int numIntensities = 0;
+		final Set<String> validProteins = new THashSet<String>();
 		try {
 			fw = new FileWriter(outputFile);
 			System.out.println("Output file: " + outputFile.getAbsolutePath());
@@ -464,9 +578,12 @@ public class FilesManager implements Clearable {
 			fw.write(
 					"ProteinName\tPeptideSequence\tCharge\tPSM\tMixture\tTechRepMixture\tRun\tChannel\tCondition\tBioReplicate\tIntensity\n");
 
-			// create a map by sequence
+			// create a map by sequence + charge
 			final Map<String, List<QuantifiedPSMInterface>> psmsBySequenceAndCharge = new THashMap<String, List<QuantifiedPSMInterface>>();
 			for (final QuantifiedPSMInterface psm : psms) {
+				if (psm.isDiscarded()) {
+					continue;
+				}
 				final String seq = psm.getSequence() + "_" + psm.getChargeState();
 
 				if (!psmsBySequenceAndCharge.containsKey(seq)) {
@@ -479,13 +596,20 @@ public class FilesManager implements Clearable {
 			// in the output
 			final Set<String> seqsSet = psmsBySequenceAndCharge.keySet();
 			final List<String> seqList = seqsSet.stream().sorted().collect(Collectors.toCollection(ArrayList::new));
-			final Set<String> validProteins = new THashSet<String>();
+
 			for (final String seq : seqList) {
 				final List<QuantifiedPSMInterface> psmsOfSeq = psmsBySequenceAndCharge.get(seq);
 
-				final List<String> accs = DataUtil.getAccToPrint(psmsOfSeq);
-				final String acc = StringUtils.getSortedSeparatedValueStringFromChars(accs, ",");
-
+				String acc = null;
+				if (simplifyProteinGroups) {
+					// acc using primary proteins
+					final List<QuantifiedProteinInterface> primaryProteins = DataUtil
+							.getPrimaryProteins(DataUtil.getGroups(psmsOfSeq));
+					acc = DataUtil.getAccessions(primaryProteins);
+				} else {
+					acc = StringUtils.getSortedSeparatedValueStringFromChars(DataUtil.getAccToPrint(psmsOfSeq),
+							DataUtil.SEPARATOR);
+				}
 				validProteins.add(acc);
 
 				final int charge = DataUtil.getChargeToPrint(psmsOfSeq);
@@ -502,21 +626,19 @@ public class FilesManager implements Clearable {
 
 					for (final QuantificationLabel label : intensities.keySet().stream().sorted()
 							.collect(Collectors.toList())) {
+						numIntensities++;
 						printMSstatsTMTOutputLine(fw, label, intensities.get(label), acc, charge, peptideSequence, psm,
 								run, experimentalDesign);
 					}
 				}
 			}
-			System.out.println("\n*******");
-			System.out.println("Valid data: " + psms.size() + " PSMs");
-			System.out.println(psmsBySequenceAndCharge.size() + " peptides (sequences+charge)");
-			System.out.println(validProteins.size() + " proteins\n*******");
 
 		} finally {
 			if (fw != null) {
 				fw.close();
 				log.info("File written at " + outputFile.getAbsolutePath());
-				System.out.println("File ready at " + outputFile.getAbsolutePath());
+				System.out.println("File ready at '" + outputFile.getAbsolutePath() + "' with " + numIntensities
+						+ " intensities and " + validProteins.size() + " proteins.");
 				addOutputFile(outputFile, "MSstatsTMT");
 			}
 		}

@@ -28,6 +28,7 @@ import edu.scripps.yates.census.read.model.interfaces.QuantifiedProteinInterface
 import edu.scripps.yates.census.read.util.QuantificationLabel;
 import edu.scripps.yates.censustmt2msstatstmt.singletons.FilesManager;
 import edu.scripps.yates.censustmt2msstatstmt.singletons.GeneMapper;
+import edu.scripps.yates.censustmt2msstatstmt.singletons.IonFilter;
 import edu.scripps.yates.censustmt2msstatstmt.singletons.LuciphorIntegrator;
 import edu.scripps.yates.censustmt2msstatstmt.singletons.PTMList;
 import edu.scripps.yates.censustmt2msstatstmt.singletons.ProteinSequences;
@@ -38,6 +39,7 @@ import edu.scripps.yates.utilities.appversion.AppVersion;
 import edu.scripps.yates.utilities.dates.DatesUtil;
 import edu.scripps.yates.utilities.grouping.GroupableProtein;
 import edu.scripps.yates.utilities.grouping.PAnalyzer;
+import edu.scripps.yates.utilities.grouping.ProteinGroup;
 import edu.scripps.yates.utilities.properties.PropertiesUtil;
 import edu.scripps.yates.utilities.proteomicsmodel.PTM;
 import edu.scripps.yates.utilities.proteomicsmodel.enums.AmountType;
@@ -75,6 +77,10 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 	private Float minPurity;
 
 	private boolean createExcelFile;
+
+	private boolean simplifyProteinGroups;
+
+	private Integer minIONs;
 
 //	public CensusTMT2MSstatsTMT(File inputFile, File experimentalDesignFile, String experimentalDesignSeparator,
 //			boolean uniquePeptides, boolean useRawIntensity, String decoyPrefix, PSMSelectionType psmSelection) {
@@ -121,10 +127,10 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			// 1- get conditions and labels
 			final Map<QuantificationLabel, QuantCondition>[] conditionsByLabelsList = getConditionsByLabelsArray(
 					FilesManager.getInstance().getInputFiles(), ed);
-			String plural = "";
-			if (FilesManager.getInstance().getInputFiles().size() > 1) {
-				plural = "s";
-			}
+
+			// check whether multiple mixtures have different experimental designs or not
+			final boolean multipleMixturesWithDifferentExperimentalDesigns = checkMixtureExperimentalDesigns(
+					conditionsByLabelsList);
 
 			// 2- read input files with parser
 
@@ -148,6 +154,10 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 				System.out.println("4-Plex detected.");
 				labels = QuantificationLabel.getTMT4PlexLabels();
 			}
+			String plural = "";
+			if (FilesManager.getInstance().getInputFiles().size() > 1) {
+				plural = "s";
+			}
 			System.out.println("Reading input file" + plural + "...");
 			// 3- map genes to proteins from protein descriptions in proteins
 			final Collection<QuantifiedProteinInterface> proteins = parser.getProteinMap().values();
@@ -163,8 +173,8 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 
 			// 4- merge psms with luciphor ones
 			if (luciphorFile != null) {
-				LuciphorIntegrator.getInstance(luciphorFile).mergeWithLuciphor(psms, luciphorLocalFDRThreshold,
-						luciphorGlobalFDRThreshold);
+				final LuciphorIntegrator luciphorIntegrator = LuciphorIntegrator.getInstance(luciphorFile);
+				luciphorIntegrator.mergeWithLuciphor(psms, luciphorLocalFDRThreshold, luciphorGlobalFDRThreshold);
 			}
 
 			// 5- group proteins so that we can remove non conclusive ones
@@ -172,7 +182,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			proteinsToGroup.addAll(proteins);
 			final boolean separateNonConclusiveProteins = true;
 			final PAnalyzer panalyzer = new PAnalyzer(separateNonConclusiveProteins);
-			panalyzer.run(proteinsToGroup);
+			final List<ProteinGroup> groups = panalyzer.run(proteinsToGroup);
 
 			// 6- retrieve annotations from uniprot
 			final long t1 = System.currentTimeMillis();
@@ -288,12 +298,25 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 				psms = SPCFilter.applySPCFilter(psms, this.minSPC, this.spcFilterType);
 			}
 
+			// 9.5- SPC filter
+			if (minIONs != null && minIONs > 1) {
+				if (PTMList.getInstance().isEmpty()) {
+					psms = IonFilter.applyMinIonsPerProteinFilter(groups, this.minIONs);
+				} else {
+					psms = IonFilter.applyMinIonsPerProteinSite(psms, minIONs);
+				}
+			}
+			// check whether some psm is discarded
+			psms = psms.stream().filter(psm -> !psm.isDiscarded()).collect(Collectors.toList());
+
 			// 10- print PSM level file
 			FilesManager.getInstance().printPSMLevelFile(psms, parser, labels);
 
 			// 11- print MSstatsTMT file
 			if (this.msstatsoutput) {
-				FilesManager.getInstance().printMSstatsTMTFFile(psms, ed, this.useRawIntensity, this.psmSelection);
+				final boolean aggregateByPTMs = !PTMList.getInstance().isEmpty();
+				FilesManager.getInstance().printMSstatsTMTFFile(psms, ed, this.useRawIntensity, this.psmSelection,
+						aggregateByPTMs, simplifyProteinGroups);
 			}
 
 			// 12- print peptide level file
@@ -314,6 +337,22 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 				throw e;
 			}
 		}
+	}
+
+	private boolean checkMixtureExperimentalDesigns(Map<QuantificationLabel, QuantCondition>[] conditionsByLabelsList) {
+		// first we check if the plexes are equal, if not we throw exception
+		int n = -1;
+		for (final Map<QuantificationLabel, QuantCondition> map : conditionsByLabelsList) {
+			if (n == -1) {
+				n = map.size();
+			} else {
+				if (n != map.size()) {
+					throw new IllegalArgumentException("Different Plexes detected in input files");
+				}
+			}
+		}
+
+		return true;
 	}
 
 	private void setMissingIntensityValuesTo1(List<QuantifiedPSMInterface> psms, List<QuantificationLabel> labels) {
@@ -564,6 +603,10 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 						+ " will be used. If 'min_spc' is empty, this parameter will be ignored.");
 		options.add(optionSPCType);
 
+		final Option optionMinION = new Option("min_ions", true,
+				"Minimum number of ions (sequence+charge) per protein (or PTM site in case of aggregating by PTMs).");
+		options.add(optionMinION);
+
 		final Option optionTMTPurity = new Option("tmt_purity", true, "Minimum TMT purity value per PSM.");
 		options.add(optionTMTPurity);
 
@@ -574,6 +617,10 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 		final Option optionCreateExcel = new Option("excel", false,
 				"If selected, an Excel file will be created compiling all the other text output files in different sheets.");
 		options.add(optionCreateExcel);
+
+		final Option simplyProteinGroups = new Option("simplify_protein_groups", false,
+				"If selected, protein accessions of a group will be simplified (if possible) to show only protein accession from UniprotKB SwissProt, ignoring accession from UniprotKB TrEmBML.");
+		options.add(simplyProteinGroups);
 		return options;
 	}
 
@@ -839,6 +886,18 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			}
 		}
 		//
+		minIONs = null;
+		if (cmd.hasOption("min_ions")) {
+			try {
+				minIONs = Integer.valueOf(cmd.getOptionValue("min_ions"));
+				if (minIONs < 0) {
+					throw new NumberFormatException();
+				}
+			} catch (final NumberFormatException e) {
+				errorInParameters("Option '-min_ions' should have a positive integer");
+			}
+		}
+		//
 		if (cmd.hasOption("pur")) {
 			try {
 				minPurity = Float.valueOf(cmd.getOptionValue("pur"));
@@ -852,6 +911,10 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 		this.createExcelFile = false;
 		if (cmd.hasOption("excel")) {
 			this.createExcelFile = true;
+		}
+		this.simplifyProteinGroups = false;
+		if (cmd.hasOption("simplify_protein_groups")) {
+			this.simplifyProteinGroups = true;
 		}
 	}
 

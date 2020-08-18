@@ -40,6 +40,7 @@ import gnu.trove.set.hash.THashSet;
 
 public class DataUtil {
 	private static final double MASS_PRECISION = 0.01;
+	public static final String SEPARATOR = "|";
 
 	public static String getIntensitiesString(QuantifiedPeptideInterface peptide, PSMAggregationType aggregation,
 			List<QuantificationLabel> labels) {
@@ -125,7 +126,7 @@ public class DataUtil {
 		if (primaryProteins != null) {
 			primaryAccs = primaryProteins.stream().map(p -> p.getAccession()).collect(Collectors.toSet());
 		}
-		final List<String> ret = new ArrayList<String>();
+		final List<String> retTMP = new ArrayList<String>();
 		for (final PTMInProtein ptmInProtein : ptmsInProtein) {
 			if (primaryAccs != null && !primaryAccs.contains(ptmInProtein.getProteinACC())) {
 				continue;
@@ -149,8 +150,23 @@ public class DataUtil {
 				if (gene == null) {
 					gene = ptmInProtein.getProteinACC();
 				}
-				ret.add(gene + "_" + ptmInProtein.getAa() + ptmInProtein.getPosition());
+				retTMP.add(gene + "_" + ptmInProtein.getAa() + ptmInProtein.getPosition());
 			}
+		}
+
+		// now we check whether we can merge some elements from the same protein/gene
+		final List<String> ret = new ArrayList<String>();
+		String currentProtein = null;
+		for (final String string : retTMP) {
+			final String protein = string.substring(0, string.indexOf("_"));
+			if (protein.equals(currentProtein)) {
+				final String newString = ret.get(ret.size() - 1) + "_" + string.substring(string.indexOf("_") + 1);
+				ret.set(ret.size() - 1, newString);
+			} else {
+				currentProtein = protein;
+				ret.add(string);
+			}
+
 		}
 		return ret;
 	}
@@ -179,7 +195,7 @@ public class DataUtil {
 				continue;
 			}
 			if (!"".equals(sb.toString())) {
-				sb.append("|");
+				sb.append(SEPARATOR);
 			}
 
 			sb.append(gene);
@@ -187,25 +203,39 @@ public class DataUtil {
 		return sb.toString();
 	}
 
-	public static List<QuantifiedProteinInterface> getPrimaryProtein(Set<ProteinGroup> groups) {
+	/**
+	 * Discards TrEmbl proteins from the groups when at least one Swiss-Prot protein
+	 * is found. In other words, just keep SwissProt proteins only, unless there is
+	 * none, and in that case, we keep all.
+	 * 
+	 * @param groups
+	 * @return
+	 */
+	public static List<QuantifiedProteinInterface> getPrimaryProteins(Set<ProteinGroup> groups) {
 		final List<QuantifiedProteinInterface> ret = new ArrayList<QuantifiedProteinInterface>();
+		final Set<QuantifiedProteinInterface> proteins = new THashSet<QuantifiedProteinInterface>();
+		final Set<String> accs = new THashSet<String>();
 		for (final ProteinGroup proteinGroup : groups) {
-
-			final Map<String, Entry> annotatedProteins = UPLR.getInstance().getAnnotatedProteins(null,
-					proteinGroup.getAccessions());
-			QuantifiedProteinInterface primaryProtein = null;
-			for (final GroupableProtein protein : proteinGroup) {
-
-				final Entry entry = annotatedProteins.get(protein.getAccession());
-				if (entry != null && UniprotEntryUtil.isSwissProt(entry)) {
-					primaryProtein = (QuantifiedProteinInterface) protein;
-				}
+			for (final GroupableProtein groupableProtein : proteinGroup) {
+				proteins.add((QuantifiedProteinInterface) groupableProtein);
 			}
-			if (primaryProtein == null) {
-				primaryProtein = (QuantifiedProteinInterface) proteinGroup.get(0);
-			}
-			ret.add(primaryProtein);
+			accs.addAll(proteinGroup.getAccessions());
 		}
+
+		final Map<String, Entry> annotatedProteins = UPLR.getInstance().getAnnotatedProteins(null, accs);
+
+		for (final QuantifiedProteinInterface protein : proteins) {
+			final Entry entry = annotatedProteins.get(protein.getAccession());
+			if (entry != null && UniprotEntryUtil.isSwissProt(entry)) {
+				ret.add(protein);
+			}
+		}
+
+		if (ret.isEmpty()) {
+			// we add all
+			ret.addAll(proteins);
+		}
+
 		return ret;
 	}
 
@@ -213,7 +243,8 @@ public class DataUtil {
 		final StringBuilder sb = new StringBuilder();
 		for (final QuantifiedProteinInterface protein : proteins) {
 			if (!"".equals(sb.toString())) {
-				sb.append("|");
+
+				sb.append(SEPARATOR);
 			}
 			sb.append(protein.getAccession());
 		}
@@ -224,7 +255,7 @@ public class DataUtil {
 		final StringBuilder sb = new StringBuilder();
 		for (final ProteinGroup proteinGroup : groups) {
 			if (!"".equals(sb.toString())) {
-				sb.append("|");
+				sb.append(SEPARATOR);
 			}
 			final StringBuilder sb2 = new StringBuilder();
 			for (final GroupableProtein protein : proteinGroup) {
@@ -251,7 +282,7 @@ public class DataUtil {
 		final StringBuilder sb = new StringBuilder();
 		for (final ProteinGroup proteinGroup : groups) {
 			if (!"".equals(sb.toString())) {
-				sb.append("|");
+				sb.append(SEPARATOR);
 			}
 			final StringBuilder sb2 = new StringBuilder();
 			for (final GroupableProtein protein : proteinGroup) {
@@ -269,7 +300,7 @@ public class DataUtil {
 		final StringBuilder sb = new StringBuilder();
 		for (final ProteinGroup proteinGroup : groups) {
 			if (!"".equals(sb.toString())) {
-				sb.append("|");
+				sb.append(SEPARATOR);
 			}
 			final StringBuilder sb2 = new StringBuilder();
 			for (final String acc : proteinGroup.getAccessions()) {
@@ -509,6 +540,14 @@ public class DataUtil {
 				}
 				ret.get(qamount.getLabel()).add(qamount);
 			}
+		}
+		return ret;
+	}
+
+	public static Set<ProteinGroup> getGroups(List<QuantifiedPSMInterface> psms) {
+		final Set<ProteinGroup> ret = new THashSet<ProteinGroup>();
+		for (final QuantifiedPSMInterface psm : psms) {
+			psm.getProteins().forEach(protein -> ret.add(protein.getProteinGroup()));
 		}
 		return ret;
 	}

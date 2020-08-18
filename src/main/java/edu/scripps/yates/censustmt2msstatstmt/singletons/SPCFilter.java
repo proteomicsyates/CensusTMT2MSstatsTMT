@@ -69,7 +69,7 @@ public class SPCFilter {
 		}
 		System.out.println(discardedSequences.size()
 				+ " peptide sequences were discarded by minimum number of spec counts " + minSPC);
-		final File outFile = FilesManager.getInstance().printDiscardedList(discardedSequences, spcFilterType, minSPC);
+		final File outFile = FilesManager.getInstance().printDiscardedListBySPC(discardedSequences, spcFilterType, minSPC);
 		System.out.println("Discarded peptides sequences written to file " + outFile.getAbsolutePath());
 
 		final List<QuantifiedPSMInterface> collect = ret.stream().distinct().collect(Collectors.toList());
@@ -102,7 +102,7 @@ public class SPCFilter {
 		}
 		System.out.println(discardedIons.size()
 				+ " ions (sequence+charge) were discarded by minimum number of spec counts " + minSPC);
-		final File outFile = FilesManager.getInstance().printDiscardedList(discardedIons, spcFilterType, minSPC);
+		final File outFile = FilesManager.getInstance().printDiscardedListBySPC(discardedIons, spcFilterType, minSPC);
 		System.out.println("Discarded ions written to file " + outFile.getAbsolutePath());
 
 		final List<QuantifiedPSMInterface> collect = ret.stream().distinct().collect(Collectors.toList());
@@ -123,13 +123,10 @@ public class SPCFilter {
 			try {
 				final List<PTMInProtein> ptmsInProtein = psm.getPTMsInProtein(UPLR.getInstance(),
 						ProteinSequences.getInstance());
-				final List<String> proteinSiteKeys = DataUtil.getProteinSiteKeys(ptmsInProtein, true, null);
+				final List<String> proteinSiteKeys = DataUtil.getProteinSiteKeys(ptmsInProtein, false, null);
 				for (final String proteinSiteKey : proteinSiteKeys) {
 					if (!psmsByProteinSiteKey.containsKey(proteinSiteKey)) {
 						psmsByProteinSiteKey.put(proteinSiteKey, new THashSet<QuantifiedPSMInterface>());
-					}
-					if (proteinSiteKey.equals("SAMD4A_S422") || proteinSiteKey.equals("SAMD4A_S418")) {
-						log.info("asdf");
 					}
 					psmsByProteinSiteKey.get(proteinSiteKey).add(psm);
 					proteinSiteKeysByPSM.get(psm).add(proteinSiteKey);
@@ -163,7 +160,7 @@ public class SPCFilter {
 		}
 		System.out.println(discardedProteinSiteKeys.size()
 				+ " protein sites were discarded by minimum number of spec counts " + minSPC);
-		final File outFile = FilesManager.getInstance().printDiscardedList(discardedProteinSiteKeys, spcFilterType,
+		final File outFile = FilesManager.getInstance().printDiscardedListBySPC(discardedProteinSiteKeys, spcFilterType,
 				minSPC);
 		System.out.println("Discarded protein sites written to file " + outFile.getAbsolutePath());
 
