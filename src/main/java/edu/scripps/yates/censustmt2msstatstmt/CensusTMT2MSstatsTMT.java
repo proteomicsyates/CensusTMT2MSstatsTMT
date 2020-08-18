@@ -28,6 +28,7 @@ import edu.scripps.yates.census.read.model.interfaces.QuantifiedProteinInterface
 import edu.scripps.yates.census.read.util.QuantificationLabel;
 import edu.scripps.yates.censustmt2msstatstmt.singletons.FilesManager;
 import edu.scripps.yates.censustmt2msstatstmt.singletons.GeneMapper;
+import edu.scripps.yates.censustmt2msstatstmt.singletons.IonFilter;
 import edu.scripps.yates.censustmt2msstatstmt.singletons.LuciphorIntegrator;
 import edu.scripps.yates.censustmt2msstatstmt.singletons.PTMList;
 import edu.scripps.yates.censustmt2msstatstmt.singletons.ProteinSequences;
@@ -38,6 +39,7 @@ import edu.scripps.yates.utilities.appversion.AppVersion;
 import edu.scripps.yates.utilities.dates.DatesUtil;
 import edu.scripps.yates.utilities.grouping.GroupableProtein;
 import edu.scripps.yates.utilities.grouping.PAnalyzer;
+import edu.scripps.yates.utilities.grouping.ProteinGroup;
 import edu.scripps.yates.utilities.properties.PropertiesUtil;
 import edu.scripps.yates.utilities.proteomicsmodel.PTM;
 import edu.scripps.yates.utilities.proteomicsmodel.enums.AmountType;
@@ -77,6 +79,8 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 	private boolean createExcelFile;
 
 	private boolean simplifyProteinGroups;
+
+	private Integer minIONs;
 
 //	public CensusTMT2MSstatsTMT(File inputFile, File experimentalDesignFile, String experimentalDesignSeparator,
 //			boolean uniquePeptides, boolean useRawIntensity, String decoyPrefix, PSMSelectionType psmSelection) {
@@ -178,7 +182,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			proteinsToGroup.addAll(proteins);
 			final boolean separateNonConclusiveProteins = true;
 			final PAnalyzer panalyzer = new PAnalyzer(separateNonConclusiveProteins);
-			panalyzer.run(proteinsToGroup);
+			final List<ProteinGroup> groups = panalyzer.run(proteinsToGroup);
 
 			// 6- retrieve annotations from uniprot
 			final long t1 = System.currentTimeMillis();
@@ -293,6 +297,17 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			if (minSPC != null && minSPC > 1) {
 				psms = SPCFilter.applySPCFilter(psms, this.minSPC, this.spcFilterType);
 			}
+
+			// 9.5- SPC filter
+			if (minIONs != null && minIONs > 1) {
+				if (PTMList.getInstance().isEmpty()) {
+					psms = IonFilter.applyMinIonsPerProteinFilter(groups, this.minIONs);
+				} else {
+					psms = IonFilter.applyMinIonsPerProteinSite(psms, minIONs);
+				}
+			}
+			// check whether some psm is discarded
+			psms = psms.stream().filter(psm -> !psm.isDiscarded()).collect(Collectors.toList());
 
 			// 10- print PSM level file
 			FilesManager.getInstance().printPSMLevelFile(psms, parser, labels);
@@ -588,6 +603,10 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 						+ " will be used. If 'min_spc' is empty, this parameter will be ignored.");
 		options.add(optionSPCType);
 
+		final Option optionMinION = new Option("min_ions", true,
+				"Minimum number of ions (sequence+charge) per protein (or PTM site in case of aggregating by PTMs).");
+		options.add(optionMinION);
+
 		final Option optionTMTPurity = new Option("tmt_purity", true, "Minimum TMT purity value per PSM.");
 		options.add(optionTMTPurity);
 
@@ -864,6 +883,18 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 				errorInParameters("Option '-spc_type' is missing");
 			} else {
 				this.spcFilterType = SPC_FILTER_TYPE.ION;
+			}
+		}
+		//
+		minIONs = null;
+		if (cmd.hasOption("min_ions")) {
+			try {
+				minIONs = Integer.valueOf(cmd.getOptionValue("min_ions"));
+				if (minIONs < 0) {
+					throw new NumberFormatException();
+				}
+			} catch (final NumberFormatException e) {
+				errorInParameters("Option '-min_ions' should have a positive integer");
 			}
 		}
 		//
