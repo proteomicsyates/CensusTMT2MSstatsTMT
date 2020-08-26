@@ -32,6 +32,7 @@ import edu.scripps.yates.utilities.proteomicsmodel.HasProteins;
 import edu.scripps.yates.utilities.proteomicsmodel.HasScores;
 import edu.scripps.yates.utilities.proteomicsmodel.Score;
 import edu.scripps.yates.utilities.proteomicsmodel.enums.AmountType;
+import edu.scripps.yates.utilities.proteomicsmodel.utils.KeyUtils;
 import edu.scripps.yates.utilities.sequence.PTMInProtein;
 import gnu.trove.list.TDoubleList;
 import gnu.trove.list.array.TDoubleArrayList;
@@ -317,11 +318,15 @@ public class DataUtil {
 	public static int getIonCount(QuantifiedPSMInterface psm, QuantParser parser) {
 		final int reCalculatedIonCount = parser.getReCalculatedIonCount(psm);
 		return reCalculatedIonCount;
-//		final Score score = getScoreObject(psm, CensusOutParser.ION_COUNT);
-//		if (score != null) {
-//			return score.getValue();
-//		}
-//		return "";
+	}
+
+	public static int getIonCountAfterFilters(QuantifiedPSMInterface psm, QuantParser parser) {
+		final String ionKey = KeyUtils.getInstance().getSequenceChargeKey(psm, true, true);
+		final Set<QuantifiedPSMInterface> psms = parser.getPSMsByIonKey().get(ionKey);
+		if (psms != null) {
+			return Long.valueOf(psms.stream().filter(psm2 -> !psm2.isDiscarded()).count()).intValue();
+		}
+		return 0;
 	}
 
 	public static Set<ProteinGroup> getGroups(HasProteins o) {

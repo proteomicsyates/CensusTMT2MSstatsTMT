@@ -1,4 +1,4 @@
-package edu.scripps.yates.censustmt2msstatstmt.singletons;
+package edu.scripps.yates.censustmt2msstatstmt.filters;
 
 import java.io.File;
 import java.util.Collection;
@@ -10,6 +10,9 @@ import java.util.stream.Collectors;
 import org.apache.log4j.Logger;
 
 import edu.scripps.yates.census.read.model.interfaces.QuantifiedPSMInterface;
+import edu.scripps.yates.censustmt2msstatstmt.singletons.FilesManager;
+import edu.scripps.yates.censustmt2msstatstmt.singletons.ProteinSequences;
+import edu.scripps.yates.censustmt2msstatstmt.singletons.UPLR;
 import edu.scripps.yates.censustmt2msstatstmt.util.DataUtil;
 import edu.scripps.yates.utilities.grouping.GroupablePeptide;
 import edu.scripps.yates.utilities.grouping.ProteinGroup;

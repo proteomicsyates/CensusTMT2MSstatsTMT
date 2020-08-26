@@ -24,7 +24,7 @@ import edu.scripps.yates.census.read.util.QuantificationLabel;
 import edu.scripps.yates.censustmt2msstatstmt.ExperimentalDesign;
 import edu.scripps.yates.censustmt2msstatstmt.Mixture;
 import edu.scripps.yates.censustmt2msstatstmt.PSMAggregationType;
-import edu.scripps.yates.censustmt2msstatstmt.SPC_FILTER_TYPE;
+import edu.scripps.yates.censustmt2msstatstmt.filters.SPC_FILTER_TYPE;
 import edu.scripps.yates.censustmt2msstatstmt.util.DataUtil;
 import edu.scripps.yates.utilities.dates.DatesUtil;
 import edu.scripps.yates.utilities.files.FileUtils;
@@ -213,7 +213,8 @@ public class FilesManager implements Clearable {
 		final File outputFile = getPSMOutputFile();
 		final FileWriter fw = new FileWriter(outputFile);
 		// header
-		fw.write("acc(s)\tgene(s)\tdescription(s)\tprimary acc\tprimary gene\tsequence\tz\tSpC before filters\t");
+		fw.write(
+				"acc(s)\tgene(s)\tdescription(s)\tprimary acc\tprimary gene\tsequence\tz\tIon's SpC before filters\tIon's SpC after filters\t");
 		if (LuciphorIntegrator.getInstance() != null) {
 			fw.write("Modified by Luciphor\t");
 		}
@@ -229,16 +230,10 @@ public class FilesManager implements Clearable {
 		if (LuciphorIntegrator.getInstance() != null) {
 			fw.write("Luciphor localFDR\tLuciphor globalFDR\t");
 		}
-		fw.write("TMT_purity\tsignal to noise\tion count\tscan number\tfile name\n");
+		fw.write("TMT_purity\tsignal to noise\tscan number\tfile name\n");
 		int numPSMs = 0;
 		for (final QuantifiedPSMInterface psm : psms) {
-			if (KeyUtils.getInstance().getSequenceChargeKey(psm, true, true)
-					.equals("TALPTSGSSAGELELLAGEVPARS(+79.966)PGAFDMSGVR-4")) {
-				System.out.println("asdf");
-			}
-			if (KeyUtils.getInstance().getSequenceChargeKey(psm, true, true).equals("S(+79.966)PGAFDMSGVR-4")) {
-				System.out.println("asdf");
-			}
+
 			if (psm.isDiscarded()) {
 				continue;
 			}
@@ -279,9 +274,7 @@ public class FilesManager implements Clearable {
 				String sitesWithAccs = "";
 				String sitesWithGenes = "";
 				try {
-					if (psm.toString().equals("20181230_P-IGF1_2-67489-Y(+79.966)NPNVLPVQCT(+79.966)GK-2")) {
-						log.info("adf");
-					}
+
 					final List<PTMInProtein> ptMsInProtein = psm.getPTMsInProtein(UPLR.getInstance(),
 							ProteinSequences.getInstance());
 					final List<String> proteinSiteKeys = DataUtil.getProteinSiteKeys(ptMsInProtein, false,
@@ -308,8 +301,11 @@ public class FilesManager implements Clearable {
 			sb.append(psm.getFullSequence()).append("\t");
 			// charge state
 			sb.append(psm.getChargeState()).append("\t");
-			// Spc
-			sb.append(psm.getPeptide().getPSMs().size()).append("\t");
+			// Ion's SpC before filters
+			final String ionKey = KeyUtils.getInstance().getSequenceChargeKey(psm, true, true);
+			sb.append(parser.getPSMsByIonKey().get(ionKey).size()).append("\t");
+			// Ion's SpC after filters
+			sb.append(parser.getPSMsByIonKey().get(ionKey).stream().filter(p -> !p.isDiscarded()).count()).append("\t");
 
 			if (LuciphorIntegrator.getInstance() != null) {
 				// modified by Luciphor
@@ -329,8 +325,7 @@ public class FilesManager implements Clearable {
 			sb.append(DataUtil.getTMTPurity(psm)).append("\t");
 			// signal to noise
 			sb.append(DataUtil.getSignalToNoise(psm)).append("\t");
-			// ion count
-			sb.append(DataUtil.getIonCount(psm, parser)).append("\t");
+
 			// scan
 			sb.append(psm.getScanNumber()).append("\t");
 

@@ -1,4 +1,4 @@
-package edu.scripps.yates.censustmt2msstatstmt;
+package edu.scripps.yates.censustmt2msstatstmt.filters;
 
 public enum SPC_FILTER_TYPE {
 	SEQUENCE, ION, PROTEIN_SITE;
