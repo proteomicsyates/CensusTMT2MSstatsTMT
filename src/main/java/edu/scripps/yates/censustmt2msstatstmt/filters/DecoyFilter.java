@@ -1,4 +1,4 @@
-package edu.scripps.yates.censustmt2msstatstmt;
+package edu.scripps.yates.censustmt2msstatstmt.filters;
 
 import java.util.List;
 import java.util.regex.Matcher;

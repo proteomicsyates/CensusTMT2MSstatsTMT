@@ -1,4 +1,4 @@
-package edu.scripps.yates.censustmt2msstatstmt.singletons;
+package edu.scripps.yates.censustmt2msstatstmt.filters;
 
 import java.io.File;
 import java.util.Collection;
@@ -10,7 +10,9 @@ import java.util.stream.Collectors;
 import org.apache.log4j.Logger;
 
 import edu.scripps.yates.census.read.model.interfaces.QuantifiedPSMInterface;
-import edu.scripps.yates.censustmt2msstatstmt.SPC_FILTER_TYPE;
+import edu.scripps.yates.censustmt2msstatstmt.singletons.FilesManager;
+import edu.scripps.yates.censustmt2msstatstmt.singletons.ProteinSequences;
+import edu.scripps.yates.censustmt2msstatstmt.singletons.UPLR;
 import edu.scripps.yates.censustmt2msstatstmt.util.DataUtil;
 import edu.scripps.yates.utilities.proteomicsmodel.utils.KeyUtils;
 import edu.scripps.yates.utilities.sequence.PTMInProtein;
@@ -65,11 +67,14 @@ public class SPCFilter {
 				ret.addAll(psmSet);
 			} else {
 				discardedSequences.add(sequenceKey);
+				// mark them as discarded
+				psmSet.stream().forEach(psm -> psm.setDiscarded(true));
 			}
 		}
 		System.out.println(discardedSequences.size()
 				+ " peptide sequences were discarded by minimum number of spec counts " + minSPC);
-		final File outFile = FilesManager.getInstance().printDiscardedListBySPC(discardedSequences, spcFilterType, minSPC);
+		final File outFile = FilesManager.getInstance().printDiscardedListBySPC(discardedSequences, spcFilterType,
+				minSPC);
 		System.out.println("Discarded peptides sequences written to file " + outFile.getAbsolutePath());
 
 		final List<QuantifiedPSMInterface> collect = ret.stream().distinct().collect(Collectors.toList());
@@ -98,6 +103,8 @@ public class SPCFilter {
 				ret.addAll(psmSet);
 			} else {
 				discardedIons.add(ionKey);
+				// mark the psms as discarded
+				psmSet.stream().forEach(psm -> psm.setDiscarded(true));
 			}
 		}
 		System.out.println(discardedIons.size()
@@ -139,9 +146,6 @@ public class SPCFilter {
 		final Set<QuantifiedPSMInterface> ret = new THashSet<QuantifiedPSMInterface>();
 		final Set<String> discardedProteinSiteKeys = new THashSet<String>();
 		for (final QuantifiedPSMInterface psm : proteinSiteKeysByPSM.keySet()) {
-			if ("20181230_P-IGF1_1-19035-AY(+79.966)SSPS(+79.966)TTPEAR-2".equals(psm.toString())) {
-				log.info("asdf");
-			}
 			final Set<String> proteinSiteKeys = proteinSiteKeysByPSM.get(psm);
 			boolean someValid = false;
 			for (final String proteinSiteKey : proteinSiteKeys) {
@@ -156,6 +160,8 @@ public class SPCFilter {
 				ret.add(psm);
 			} else {
 				discardedProteinSiteKeys.addAll(proteinSiteKeys);
+				// mark the psm as discarded
+				psm.setDiscarded(true);
 			}
 		}
 		System.out.println(discardedProteinSiteKeys.size()

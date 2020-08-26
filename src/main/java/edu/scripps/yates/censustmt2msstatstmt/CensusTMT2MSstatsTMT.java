@@ -26,13 +26,16 @@ import edu.scripps.yates.census.read.model.QuantAmount;
 import edu.scripps.yates.census.read.model.interfaces.QuantifiedPSMInterface;
 import edu.scripps.yates.census.read.model.interfaces.QuantifiedProteinInterface;
 import edu.scripps.yates.census.read.util.QuantificationLabel;
+import edu.scripps.yates.censustmt2msstatstmt.filters.DecoyFilter;
+import edu.scripps.yates.censustmt2msstatstmt.filters.IonFilter;
+import edu.scripps.yates.censustmt2msstatstmt.filters.PurityFilter;
+import edu.scripps.yates.censustmt2msstatstmt.filters.SPCFilter;
+import edu.scripps.yates.censustmt2msstatstmt.filters.SPC_FILTER_TYPE;
 import edu.scripps.yates.censustmt2msstatstmt.singletons.FilesManager;
 import edu.scripps.yates.censustmt2msstatstmt.singletons.GeneMapper;
-import edu.scripps.yates.censustmt2msstatstmt.singletons.IonFilter;
 import edu.scripps.yates.censustmt2msstatstmt.singletons.LuciphorIntegrator;
 import edu.scripps.yates.censustmt2msstatstmt.singletons.PTMList;
 import edu.scripps.yates.censustmt2msstatstmt.singletons.ProteinSequences;
-import edu.scripps.yates.censustmt2msstatstmt.singletons.SPCFilter;
 import edu.scripps.yates.censustmt2msstatstmt.singletons.UPLR;
 import edu.scripps.yates.censustmt2msstatstmt.util.DataUtil;
 import edu.scripps.yates.utilities.appversion.AppVersion;
@@ -70,11 +73,11 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 
 	private CensusOutParser parser;
 
-	private edu.scripps.yates.censustmt2msstatstmt.SPC_FILTER_TYPE spcFilterType;
+	private edu.scripps.yates.censustmt2msstatstmt.filters.SPC_FILTER_TYPE spcFilterType;
 
 	private File luciphorFile;
 
-	private Float minPurity;
+	private PurityFilter purityFilter;
 
 	private boolean createExcelFile;
 
@@ -210,12 +213,14 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 				// 8.1- check whether the peptides are wrongly mapped in the input file
 				for (final QuantifiedProteinInterface protein : psm.getQuantifiedProteins()) {
 					final String acc = protein.getAccession();
+
 					final List<PositionInProtein> startingPositionsInProtein = psm.getStartingPositionsInProtein(acc,
 							UPLR.getInstance(), ProteinSequences.getInstance());
 					if (startingPositionsInProtein.isEmpty()) {
 						psmsWronglymapped.add(psm.getScanNumber() + "\t" + psm.getFullSequence() + "\t" + acc + "\t"
 								+ protein.getDescription());
 					}
+
 				}
 				// 8.2- check decoy
 				if (decoyFilter != null && decoyFilter.isDecoy(psm)) {
@@ -224,7 +229,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 					continue;
 				}
 				// 8.3- TMT purity
-				if (minPurity != null && !DataUtil.isTMTPurityValid(psm, minPurity)) {
+				if (purityFilter != null && !purityFilter.passFilter(psm)) {
 					psm.setDiscarded(true);
 					discardedByTMTPurity++;
 					continue;
@@ -272,7 +277,8 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 				if (fastaFile != null) {
 					message += " This means that either you used the wrong fasta file (not the one used in the search of your data), or there is a problem in your input files";
 				} else {
-					message += " This means that sequences retrieved in UniprotKB have changed compared to the ones you used in your search. Try to use the fasta file you actually used for search if you want to avoid this problem.";
+					message += " This means that sequences retrieved in UniprotKB have changed compared to the ones you used in your search, or you had protein sequences in your database that are not in UniprotKB (proteins marked as contaminants, custom protein sequences, etc...)."
+							+ " Try to use the fasta file you actually used for search if you want to avoid this problem.";
 				}
 				System.out.println(message);
 				FilesManager.getInstance().printList(psmsWronglymapped, "wrong_mapped");
@@ -283,8 +289,8 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			if (discardedAsDecoy > 0) {
 				System.out.println(discardedAsDecoy + " PSMs discarded as decoys");
 			}
-			if (minPurity != null) {
-				System.out.println(discardedByTMTPurity + " PSMs discarded by TMT purity threshold " + minPurity);
+			if (purityFilter != null) {
+				System.out.println(discardedByTMTPurity + " PSMs discarded by TMT purity threshold " + purityFilter);
 			}
 			if (!PTMList.getInstance().isEmpty()) {
 				System.out.println(discardedByPTMs + " PSMs discarded for not having any PTM with delta mass: ["
@@ -328,7 +334,9 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			}
 			//
 
-		} catch (final Exception e) {
+		} catch (
+
+		final Exception e) {
 			if (e instanceof WrongTMTLabels) {
 				throw new WrongTMTLabels(
 						"Error in annotation file. The TMT channels in annotation file don't match with TMT channels in input file: "
@@ -768,6 +776,9 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 				System.out.println(
 						"Fasta file not provided when using '-ptms' option. Protein sequences will be retrieved from Uniprot if possible...");
 			}
+			// we discard any previous protein sequence we had just in case a previous run
+			// had a fasta file
+			ProteinSequences.getInstance().clearData();
 		}
 //		} else {
 //			System.out.println("Option -fasta ignored");
@@ -898,15 +909,15 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			}
 		}
 		//
-		if (cmd.hasOption("pur")) {
+		if (cmd.hasOption("tmt_purity")) {
 			try {
-				minPurity = Float.valueOf(cmd.getOptionValue("pur"));
-
+				final float minimumPurity = Float.valueOf(cmd.getOptionValue("tmt_purity"));
+				this.purityFilter = new PurityFilter(minimumPurity);
 			} catch (final NumberFormatException e) {
 				errorInParameters("Minimum TMT purity has to be a number");
 			}
 		} else {
-			minPurity = null;
+			purityFilter = null;
 		}
 		this.createExcelFile = false;
 		if (cmd.hasOption("excel")) {
