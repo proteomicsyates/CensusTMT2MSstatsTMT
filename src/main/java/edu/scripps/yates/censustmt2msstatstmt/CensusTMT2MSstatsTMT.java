@@ -44,7 +44,9 @@ import edu.scripps.yates.utilities.grouping.GroupableProtein;
 import edu.scripps.yates.utilities.grouping.PAnalyzer;
 import edu.scripps.yates.utilities.grouping.ProteinGroup;
 import edu.scripps.yates.utilities.properties.PropertiesUtil;
+import edu.scripps.yates.utilities.proteomicsmodel.MSRun;
 import edu.scripps.yates.utilities.proteomicsmodel.PTM;
+import edu.scripps.yates.utilities.proteomicsmodel.Protein;
 import edu.scripps.yates.utilities.proteomicsmodel.enums.AmountType;
 import edu.scripps.yates.utilities.sequence.PositionInProtein;
 import edu.scripps.yates.utilities.strings.StringUtils;
@@ -164,6 +166,45 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			System.out.println("Reading input file" + plural + "...");
 			// 3- map genes to proteins from protein descriptions in proteins
 			final Collection<QuantifiedProteinInterface> proteins = parser.getProteinMap().values();
+
+			if (ed != null) {
+				// input data check: whether we find the runs in the input data
+				final Set<String> runsInAnnotation = new THashSet<String>();
+
+				ed.getMixtures().forEach(mix -> runsInAnnotation.addAll(mix.getRuns()));
+				final Set<String> runsFromInputDataNotInAnnotation = new THashSet<String>();
+				final Set<String> runsInBoth = new THashSet<String>();
+				for (final Protein protein : proteins) {
+					final Set<MSRun> msRuns = protein.getMSRuns();
+					for (final MSRun msrun : msRuns) {
+						final String msRunId = msrun.getRunId();
+						if (!runsInAnnotation.contains(msRunId)) {
+							runsFromInputDataNotInAnnotation.add(msRunId);
+						} else {
+							runsInBoth.add(msRunId);
+						}
+					}
+				}
+				final Set<String> runsInAnnotationNotInInputData = new THashSet<String>();
+				for (final String run : runsInAnnotation) {
+					if (!runsInBoth.contains(run)) {
+						runsInAnnotationNotInInputData.add(run);
+					}
+				}
+				if (!runsInAnnotationNotInInputData.isEmpty()) {
+					final String runsString = StringUtils
+							.getSortedSeparatedValueStringFromChars(runsInAnnotationNotInInputData, ", ");
+					System.err.println(runsInAnnotation.size() + " Runs (" + runsString
+							+ ") that are present in the Annotation file ('"
+							+ FilenameUtils.getName(experimentalDesignFile.getAbsolutePath())
+							+ "') are not found in the input data file!");
+					System.err.println(
+							"Check your input data file and make sure that all runs in the annotation file are present. Here are the runs from the input data that are not present in the input data: "
+									+ StringUtils.getSortedSeparatedValueStringFromChars(
+											runsFromInputDataNotInAnnotation, ", "));
+					throw new IllegalArgumentException("Invalid annotation file: runs not found: " + runsString);
+				}
+			}
 			GeneMapper.getInstance().mapGenesFromProteinDescriptionsInInputFile(proteins);
 
 			// get the PSMs
@@ -334,9 +375,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			}
 			//
 
-		} catch (
-
-		final Exception e) {
+		} catch (final Exception e) {
 			if (e instanceof WrongTMTLabels) {
 				throw new WrongTMTLabels(
 						"Error in annotation file. The TMT channels in annotation file don't match with TMT channels in input file: "
@@ -637,7 +676,6 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 		try {
 			runConversionToMSstatsTMT();
 		} catch (final Exception e) {
-			e.printStackTrace();
 			throw new RuntimeException(e);
 		}
 	}
