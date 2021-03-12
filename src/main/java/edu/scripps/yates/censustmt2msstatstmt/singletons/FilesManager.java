@@ -477,9 +477,6 @@ public class FilesManager implements Clearable {
 			// create a map by sequence + charge
 			final Map<String, List<QuantifiedPSMInterface>> psmsBySequenceAndCharge = new THashMap<String, List<QuantifiedPSMInterface>>();
 			for (final QuantifiedPSMInterface psm : psms) {
-				if (psm.getScanNumber().equals("48837") || psm.getScanNumber().equals("43349")) {
-					System.out.println("asdf");
-				}
 				if (psm.isDiscarded()) {
 					continue;
 				}
@@ -496,9 +493,6 @@ public class FilesManager implements Clearable {
 			final Set<String> seqsSet = psmsBySequenceAndCharge.keySet();
 			final List<String> seqList = seqsSet.stream().sorted().collect(Collectors.toCollection(ArrayList::new));
 			for (final String seq : seqList) {
-				if (seq.equals("EEEWDPEYT(+79.966)PK_3")) {
-					System.out.println("asdf");
-				}
 				final List<QuantifiedPSMInterface> psmsOfSeq = psmsBySequenceAndCharge.get(seq);
 
 				final Set<String> runs = psmsOfSeq.stream().map(psm -> psm.getMSRun().getRunId())
@@ -644,15 +638,27 @@ public class FilesManager implements Clearable {
 			throws IOException {
 		final Mixture mixture = experimentalDesign.getMixtureByRun(run);
 		final Float channel = mixture.getChannelByLabel(label);
+		if (channel == null) {
+			// this may be because that channel was not used and was not included in the
+			// annotation file (experimental design)
+			return;
+		}
+
+		String conditionName = null;
 		final QuantCondition condition = mixture.getConditionsByLabels().get(label);
-
+		if (condition != null) { // it can be null of the label from the peptide is not used in the analysis
+			conditionName = condition.getName();
+		}
 		final String techRepMixture = experimentalDesign.getTechRepMixtureByRun(run);
-		final String bioReplicate = experimentalDesign.getBioReplicate(channel, techRepMixture, mixture.getName());
-		final String channelString = Float.valueOf(channel).toString();
-
+		String bioReplicate = null;
+		String channelString = null;
+		if (channel != null) { // it can be null of the label from the peptide is not used in the analysis
+			bioReplicate = experimentalDesign.getBioReplicate(channel, techRepMixture, mixture.getName());
+			channelString = Float.valueOf(channel).toString();
+		}
 		fw.write(acc + "\t" + peptideSequence + "\t" + charge + "\t" + psm + "\t" + mixture.getName() + "\t"
-				+ techRepMixture + "\t" + run + "\t" + channelString + "\t" + condition.getName() + "\t" + bioReplicate
-				+ "\t" + intensity + "\n");
+				+ techRepMixture + "\t" + run + "\t" + channelString + "\t" + conditionName + "\t" + bioReplicate + "\t"
+				+ intensity + "\n");
 
 	}
 

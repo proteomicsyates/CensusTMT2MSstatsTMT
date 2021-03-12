@@ -146,19 +146,14 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			parser.setDecoyPattern(this.decoyPrefix);
 
 			List<QuantificationLabel> labels = null;
-			if (parser.isTMT10().values().iterator().next()) {
-				System.out.println("10-Plex detected.");
-				labels = QuantificationLabel.getTMT10PlexLabels();
-			} else if (parser.isTMT6().values().iterator().next()) {
-				System.out.println("6-Plex detected.");
-				labels = QuantificationLabel.getTMT6PlexLabels();
-			} else if (parser.isTMT11().values().iterator().next()) {
-				System.out.println("11-Plex detected.");
-				labels = QuantificationLabel.getTMT11PlexLabels();
-			} else if (parser.isTMT4().values().iterator().next()) {
-				System.out.println("4-Plex detected.");
-				labels = QuantificationLabel.getTMT4PlexLabels();
+			if (parser.getTmtPlex() == null) {
+				throw new IllegalArgumentException(
+						"TMT is not detected (or not supported) in some of the input files. Are you sure is a TMT census out file?");
 			}
+			final int plex = parser.getTmtPlex();
+			System.out.println("TMT " + plex + " plex detected");
+			labels = QuantificationLabel.getTMTPlexLabels(plex);
+
 			String plural = "";
 			if (FilesManager.getInstance().getInputFiles().size() > 1) {
 				plural = "s";
@@ -447,16 +442,14 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 	 * @param experimentalDesign
 	 * @return
 	 * @throws IOException
+	 * @throws WrongTMTLabels
 	 */
 	private Map<QuantificationLabel, QuantCondition>[] getConditionsByLabelsArray(List<File> inputFiles2,
-			ExperimentalDesign experimentalDesign) throws IOException {
+			ExperimentalDesign experimentalDesign) throws IOException, WrongTMTLabels {
 		final Map<QuantificationLabel, QuantCondition>[] ret = new Map[inputFiles2.size()];
 		if (experimentalDesign != null) {
-			if (inputFiles2.size() == 1) {
-				ret[0] = experimentalDesign.getMixtures().iterator().next().getConditionsByLabels();
-				return ret;
-			}
-			int index = 0;
+
+			int fileIndex = 0;
 			for (final File inputFile : inputFiles2) {
 
 				try {
@@ -465,6 +458,10 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 					parser.setIgnoreTaxonomies(true);
 					parser.setChargeSensible(true);
 					parser.setDistinguishModifiedSequences(true);
+					final int tmt = parser.getTmtPlex();
+					// Important: set the plex before creating the mixtures so that it is used for
+					// creating them
+					experimentalDesign.setTMTPlex(tmt);
 					final Set<String> runs = parser.getPSMMap().values().stream().map(psm -> psm.getMSRun().getRunId())
 							.collect(Collectors.toSet());
 					for (final Mixture mixture : experimentalDesign.getMixtures()) {
@@ -477,10 +474,10 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 							}
 						}
 						if (valid) {
-							ret[index] = mixture.getConditionsByLabels();
+							ret[fileIndex] = mixture.getConditionsByLabels();
 						}
 					}
-					if (ret[index] == null) {
+					if (ret[fileIndex] == null) {
 						throw new IllegalArgumentException("Runs in input file '" + inputFile.getAbsolutePath() + "' ("
 								+ StringUtils.getSeparatedValueStringFromChars(runs.toArray(), ",")
 								+ ") are not found in the annotation file.");
@@ -488,7 +485,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 				} catch (final FileNotFoundException e) {
 				} catch (final QuantParserException e) {
 				} finally {
-					index++;
+					fileIndex++;
 				}
 			}
 		} else {
@@ -502,42 +499,14 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			for (final File inputFile : inputFiles2) {
 				try {
 					final Map<QuantificationLabel, QuantCondition> conditionsByLabels = new THashMap<QuantificationLabel, QuantCondition>();
-					final boolean istmt4 = parser.isTMT4Files().get(inputFile);
-					final boolean istmt6 = parser.isTMT6Files().get(inputFile);
-					final boolean istmt10 = parser.isTMT10Files().get(inputFile);
-					final boolean istmt11 = parser.isTMT11Files().get(inputFile);
-					if (istmt4) {
-						final List<QuantificationLabel> tmt4PlexLabels = QuantificationLabel.getTMT4PlexLabels();
-						int cond = 1;
-						for (final QuantificationLabel quantificationLabel : tmt4PlexLabels) {
-							conditionsByLabels.put(quantificationLabel, new QuantCondition("cond" + cond));
-							cond++;
-						}
-					} else if (istmt6) {
-						final List<QuantificationLabel> tmt6PlexLabels = QuantificationLabel.getTMT6PlexLabels();
-						int cond = 1;
-						for (final QuantificationLabel quantificationLabel : tmt6PlexLabels) {
-							conditionsByLabels.put(quantificationLabel, new QuantCondition("cond" + cond));
-							cond++;
-						}
-					} else if (istmt10) {
-						final List<QuantificationLabel> tmt10PlexLabels = QuantificationLabel.getTMT10PlexLabels();
-						int cond = 1;
-						for (final QuantificationLabel quantificationLabel : tmt10PlexLabels) {
-							conditionsByLabels.put(quantificationLabel, new QuantCondition("cond" + cond));
-							cond++;
-						}
-					} else if (istmt11) {
-						final List<QuantificationLabel> tmt11PlexLabels = QuantificationLabel.getTMT11PlexLabels();
-						int cond = 1;
-						for (final QuantificationLabel quantificationLabel : tmt11PlexLabels) {
-							conditionsByLabels.put(quantificationLabel, new QuantCondition("cond" + cond));
-							cond++;
-						}
-					} else {
-						throw new IllegalArgumentException(
-								"The file is not detected as any TMT type (TMT6, TMT10 or TMT11");
+					final int plex = parser.getTmtPlex();
+					final List<QuantificationLabel> tmtPlexLabels = QuantificationLabel.getTMTPlexLabels(plex);
+					int cond = 1;
+					for (final QuantificationLabel quantificationLabel : tmtPlexLabels) {
+						conditionsByLabels.put(quantificationLabel, new QuantCondition("cond" + cond));
+						cond++;
 					}
+
 					ret[index] = conditionsByLabels;
 
 				} catch (final FileNotFoundException e) {

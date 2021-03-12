@@ -30,6 +30,7 @@ public class ExperimentalDesign {
 	private final Map<String, String> techRepMixtureByRun = new THashMap<String, String>();
 	private final Map<String, String> bioReplicateByChannelTechRepMixtureAndMixture = new THashMap<String, String>();
 	private final Map<String, Set<String>> fractionsByRun = new THashMap<String, Set<String>>();
+	private int tmtPlex;
 
 	public ExperimentalDesign(File experimentalDesignFile, String separator) throws IOException {
 		try {
@@ -112,6 +113,18 @@ public class ExperimentalDesign {
 
 	public Collection<Mixture> getMixtures() {
 		return mixtureByMixtureName.values();
+	}
+
+	/**
+	 * Sets the tmtPlex to all mixtures in this experimental design.
+	 * 
+	 * @param tmtPlex
+	 */
+	public void setTMTPlex(int tmtPlex) {
+
+		for (final Mixture mixture : getMixtures()) {
+			mixture.setTMTPlex(tmtPlex);
+		}
 	}
 
 }
