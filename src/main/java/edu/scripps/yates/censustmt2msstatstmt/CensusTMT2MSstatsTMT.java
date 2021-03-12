@@ -101,6 +101,8 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 
 	public CensusTMT2MSstatsTMT(String[] args) throws SomeErrorInParametersOcurred, ParseException {
 		super(args);
+		System.setOut(super.gui.getStatusPrintStream());
+		System.setErr(super.gui.getStatusPrintStream());
 	}
 
 	public static void main(String[] args) {
