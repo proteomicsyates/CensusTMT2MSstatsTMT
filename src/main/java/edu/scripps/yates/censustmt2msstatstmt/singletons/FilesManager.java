@@ -494,38 +494,49 @@ public class FilesManager implements Clearable {
 			final List<String> seqList = seqsSet.stream().sorted().collect(Collectors.toCollection(ArrayList::new));
 			for (final String seq : seqList) {
 				final List<QuantifiedPSMInterface> psmsOfSeq = psmsBySequenceAndCharge.get(seq);
-
-				final Set<String> runs = psmsOfSeq.stream().map(psm -> psm.getMSRun().getRunId())
+				// here we want to write the run column as the file name, to not separate the
+				// fractions
+				final Set<String> fileNames = psmsOfSeq.stream().map(psm -> psm.getFileNames().iterator().next())
 						.collect(Collectors.toSet());
-				for (final String run : runs) {
-					final List<QuantifiedPSMInterface> psmsOfSeqAndRun = psmsOfSeq.stream()
-							.filter(psm -> psm.getMSRun().getRunId().equals(run)).collect(Collectors.toList());
-					final int charge = DataUtil.getChargeToPrint(psmsOfSeqAndRun);
-					final Map<QuantificationLabel, Double> intensities = DataUtil.getIntensitiesToPrint(psmsOfSeqAndRun,
-							psmSelection, useRawIntensity);
-					final QuantifiedPSMInterface firstPSM = psmsOfSeqAndRun.get(0); // all have the same sequence and
-																					// charge so we can get just one
-					final List<PTMInProtein> ptMsInProtein = firstPSM.getPTMsInProtein(UPLR.getInstance(),
-							ProteinSequences.getInstance());
-					String proteinSiteKey = null;
-					List<QuantifiedProteinInterface> primaryProteins = null;
-					if (simplifyProteinGroups) {
-						primaryProteins = DataUtil.getPrimaryProteins(DataUtil.getGroups(firstPSM));
-					}
-					final List<String> proteinSiteKeys = DataUtil.getProteinSiteKeys(ptMsInProtein, false,
-							primaryProteins);
-					proteinSiteKey = StringUtils.getSortedSeparatedValueStringFromChars(proteinSiteKeys,
-							DataUtil.SEPARATOR);
+				for (final String fileName : fileNames) {
 
-					proteinSites.add(proteinSiteKey);
-					final String peptideSequence = firstPSM.getFullSequence();
-					final String psm = peptideSequence + "_" + charge;
+					final Set<QuantifiedPSMInterface> psmsOfSeqAndFileName = psmsOfSeq.stream()
+							.filter(psm -> psm.getFileNames().contains(fileName)).collect(Collectors.toSet());
+					final Set<String> runs = psmsOfSeqAndFileName.stream().map(psm -> psm.getMSRun().getRunId())
+							.collect(Collectors.toSet());
+					for (final String run : runs) {
+//					final List<QuantifiedPSMInterface> psmsOfSeqAndRun = psmsOfSeq.stream()
+//							.filter(psm -> psm.getMSRun().getRunId().equals(run)).collect(Collectors.toList());
+						final List<QuantifiedPSMInterface> psmsOfSeqAndRun = psmsOfSeqAndFileName.stream()
+								.filter(psm -> psm.getMSRun().getRunId().equals(run)).collect(Collectors.toList());
+						final int charge = DataUtil.getChargeToPrint(psmsOfSeqAndRun);
+						final Map<QuantificationLabel, Double> intensities = DataUtil
+								.getIntensitiesToPrint(psmsOfSeqAndRun, psmSelection, useRawIntensity);
+						final QuantifiedPSMInterface firstPSM = psmsOfSeqAndRun.get(0); // all have the same sequence
+																						// and
+																						// charge so we can get just one
+						final List<PTMInProtein> ptMsInProtein = firstPSM.getPTMsInProtein(UPLR.getInstance(),
+								ProteinSequences.getInstance());
+						String proteinSiteKey = null;
+						List<QuantifiedProteinInterface> primaryProteins = null;
+						if (simplifyProteinGroups) {
+							primaryProteins = DataUtil.getPrimaryProteins(DataUtil.getGroups(firstPSM));
+						}
+						final List<String> proteinSiteKeys = DataUtil.getProteinSiteKeys(ptMsInProtein, false,
+								primaryProteins);
+						proteinSiteKey = StringUtils.getSortedSeparatedValueStringFromChars(proteinSiteKeys,
+								DataUtil.SEPARATOR);
 
-					for (final QuantificationLabel label : intensities.keySet().stream().sorted()
-							.collect(Collectors.toList())) {
-						numIntensities++;
-						printMSstatsTMTOutputLine(fw, label, intensities.get(label), proteinSiteKey, charge,
-								peptideSequence, psm, run, experimentalDesign);
+						proteinSites.add(proteinSiteKey);
+						final String peptideSequence = firstPSM.getFullSequence();
+						final String psm = peptideSequence + "_" + charge;
+
+						for (final QuantificationLabel label : intensities.keySet().stream().sorted()
+								.collect(Collectors.toList())) {
+							numIntensities++;
+							printMSstatsTMTOutputLine(fw, label, intensities.get(label), proteinSiteKey, charge,
+									peptideSequence, psm, fileName, run, experimentalDesign);
+						}
 					}
 				}
 			}
@@ -602,22 +613,30 @@ public class FilesManager implements Clearable {
 				validProteins.add(acc);
 
 				final int charge = DataUtil.getChargeToPrint(psmsOfSeq);
-				final Set<String> runs = psmsOfSeq.stream().map(psm -> psm.getMSRun().getRunId())
+				// here we want to write the run column as the file name, to not separate the
+				// fractions
+				final Set<String> fileNames = psmsOfSeq.stream().map(psm -> psm.getFileNames().iterator().next())
 						.collect(Collectors.toSet());
-				for (final String run : runs) {
-					final List<QuantifiedPSMInterface> psmsOfSeqAndRun = psmsOfSeq.stream()
-							.filter(psm -> psm.getMSRun().getRunId().equals(run)).collect(Collectors.toList());
-					final Map<QuantificationLabel, Double> intensities = DataUtil.getIntensitiesToPrint(psmsOfSeqAndRun,
-							psmSelection, useRawIntensity);
-					final QuantifiedPSMInterface firstPSM = psmsOfSeqAndRun.get(0);
-					final String peptideSequence = firstPSM.getFullSequence();
-					final String psm = peptideSequence + "_" + charge;
+				for (final String fileName : fileNames) {
+					final List<QuantifiedPSMInterface> psmsOfSeqAndFileName = psmsOfSeq.stream()
+							.filter(psm -> psm.getFileNames().contains(fileName)).collect(Collectors.toList());
+					final Set<String> runs = psmsOfSeqAndFileName.stream().map(psm -> psm.getMSRun().getRunId())
+							.collect(Collectors.toSet());
+					for (final String run : runs) {
+						final List<QuantifiedPSMInterface> psmsOfSeqAndRun = psmsOfSeqAndFileName.stream()
+								.filter(psm -> psm.getMSRun().getRunId().equals(run)).collect(Collectors.toList());
+						final Map<QuantificationLabel, Double> intensities = DataUtil
+								.getIntensitiesToPrint(psmsOfSeqAndRun, psmSelection, useRawIntensity);
+						final QuantifiedPSMInterface firstPSM = psmsOfSeqAndRun.get(0);
+						final String peptideSequence = firstPSM.getFullSequence();
+						final String psm = peptideSequence + "_" + charge;
 
-					for (final QuantificationLabel label : intensities.keySet().stream().sorted()
-							.collect(Collectors.toList())) {
-						numIntensities++;
-						printMSstatsTMTOutputLine(fw, label, intensities.get(label), acc, charge, peptideSequence, psm,
-								run, experimentalDesign);
+						for (final QuantificationLabel label : intensities.keySet().stream().sorted()
+								.collect(Collectors.toList())) {
+							numIntensities++;
+							printMSstatsTMTOutputLine(fw, label, intensities.get(label), acc, charge, peptideSequence,
+									psm, fileName, run, experimentalDesign);
+						}
 					}
 				}
 			}
@@ -634,9 +653,9 @@ public class FilesManager implements Clearable {
 	}
 
 	private void printMSstatsTMTOutputLine(FileWriter fw, QuantificationLabel label, double intensity, String acc,
-			int charge, String peptideSequence, String psm, String run, ExperimentalDesign experimentalDesign)
-			throws IOException {
-		final Mixture mixture = experimentalDesign.getMixtureByRun(run);
+			int charge, String peptideSequence, String psm, String runColumnString, String individualRun,
+			ExperimentalDesign experimentalDesign) throws IOException {
+		final Mixture mixture = experimentalDesign.getMixtureByRun(individualRun);
 		final Float channel = mixture.getChannelByLabel(label);
 		if (channel == null) {
 			// this may be because that channel was not used and was not included in the
@@ -649,7 +668,7 @@ public class FilesManager implements Clearable {
 		if (condition != null) { // it can be null of the label from the peptide is not used in the analysis
 			conditionName = condition.getName();
 		}
-		final String techRepMixture = experimentalDesign.getTechRepMixtureByRun(run);
+		final String techRepMixture = experimentalDesign.getTechRepMixtureByRun(individualRun);
 		String bioReplicate = null;
 		String channelString = null;
 		if (channel != null) { // it can be null of the label from the peptide is not used in the analysis
@@ -657,8 +676,8 @@ public class FilesManager implements Clearable {
 			channelString = Float.valueOf(channel).toString();
 		}
 		fw.write(acc + "\t" + peptideSequence + "\t" + charge + "\t" + psm + "\t" + mixture.getName() + "\t"
-				+ techRepMixture + "\t" + run + "\t" + channelString + "\t" + conditionName + "\t" + bioReplicate + "\t"
-				+ intensity + "\n");
+				+ techRepMixture + "\t" + runColumnString + "\t" + channelString + "\t" + conditionName + "\t"
+				+ bioReplicate + "\t" + intensity + "\n");
 
 	}
 
