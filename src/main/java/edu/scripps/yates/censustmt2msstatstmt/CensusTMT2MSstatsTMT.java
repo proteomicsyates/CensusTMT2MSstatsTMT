@@ -549,7 +549,7 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 
 		// add t option
 		final Option optionInputFile = new Option("input", true,
-				"Path to the input file(s). It can refer to multiple files by using wildcards ('*'), i.e: '/path/to/my/files/census*.out'");
+				"Path to the input file(s). It can refer to multiple files by using wildcards ('*'), i.e: '/path/to/my/files/census*.txt'");
 		optionInputFile.setRequired(true);
 		options.add(optionInputFile);
 
