@@ -2,6 +2,7 @@ package edu.scripps.yates.censustmt2msstatstmt.util;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -402,7 +403,7 @@ public class DataUtil {
 		return ret;
 	}
 
-	public static int getChargeToPrint(List<QuantifiedPSMInterface> psms) {
+	public static int getChargeToPrint(Collection<QuantifiedPSMInterface> psms) {
 		int charge = -1;
 		for (final QuantifiedPSMInterface psm : psms) {
 			if (charge == -1) {
@@ -416,7 +417,7 @@ public class DataUtil {
 		return charge;
 	}
 
-	public static Map<QuantificationLabel, Double> getIntensitiesToPrint(List<QuantifiedPSMInterface> psms,
+	public static Map<QuantificationLabel, Double> getIntensitiesToPrint(Collection<QuantifiedPSMInterface> psms,
 			PSMAggregationType psmSelection, boolean useRawIntensity) throws IOException {
 
 		switch (psmSelection) {
@@ -432,8 +433,8 @@ public class DataUtil {
 
 	}
 
-	private static Map<QuantificationLabel, Double> getHighestIntensitiesToPrint(List<QuantifiedPSMInterface> psms,
-			boolean useRawIntensity) throws IOException {
+	private static Map<QuantificationLabel, Double> getHighestIntensitiesToPrint(
+			Collection<QuantifiedPSMInterface> psms, boolean useRawIntensity) throws IOException {
 		QuantifiedPSMInterface highestPSM = null;
 		double highestSum = -Double.MAX_VALUE;
 		for (final QuantifiedPSMInterface psm : psms) {
@@ -471,8 +472,8 @@ public class DataUtil {
 		return ret;
 	}
 
-	private static Map<QuantificationLabel, Double> getAveragedIntensitiesToPrint(List<QuantifiedPSMInterface> psms,
-			boolean useRawIntensity) throws IOException {
+	private static Map<QuantificationLabel, Double> getAveragedIntensitiesToPrint(
+			Collection<QuantifiedPSMInterface> psms, boolean useRawIntensity) throws IOException {
 		final Map<QuantificationLabel, TDoubleList> toAverage = new EnumMap<QuantificationLabel, TDoubleList>(
 				QuantificationLabel.class);
 		for (final QuantifiedPSMInterface psm : psms) {
@@ -506,7 +507,7 @@ public class DataUtil {
 		return ret;
 	}
 
-	private static Map<QuantificationLabel, Double> getSummedIntensitiesToPrint(List<QuantifiedPSMInterface> psms,
+	private static Map<QuantificationLabel, Double> getSummedIntensitiesToPrint(Collection<QuantifiedPSMInterface> psms,
 			boolean useRawIntensity) throws IOException {
 		final Map<QuantificationLabel, Double> ret = new EnumMap<QuantificationLabel, Double>(
 				QuantificationLabel.class);

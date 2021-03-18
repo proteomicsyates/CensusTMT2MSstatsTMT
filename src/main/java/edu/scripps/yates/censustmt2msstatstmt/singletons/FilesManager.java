@@ -502,42 +502,72 @@ public class FilesManager implements Clearable {
 
 					final Set<QuantifiedPSMInterface> psmsOfSeqAndFileName = psmsOfSeq.stream()
 							.filter(psm -> psm.getFileNames().contains(fileName)).collect(Collectors.toSet());
+					// here we have psms that have the same sequence+charge, that are from the same
+					// file (sema TMT run) but from different fractions.
+					// we want now to aggregate these values according to the aggregation method
+					// chosen by the user
+					// TODO
 					final Set<String> runs = psmsOfSeqAndFileName.stream().map(psm -> psm.getMSRun().getRunId())
 							.collect(Collectors.toSet());
-					for (final String run : runs) {
-//					final List<QuantifiedPSMInterface> psmsOfSeqAndRun = psmsOfSeq.stream()
-//							.filter(psm -> psm.getMSRun().getRunId().equals(run)).collect(Collectors.toList());
-						final List<QuantifiedPSMInterface> psmsOfSeqAndRun = psmsOfSeqAndFileName.stream()
-								.filter(psm -> psm.getMSRun().getRunId().equals(run)).collect(Collectors.toList());
-						final int charge = DataUtil.getChargeToPrint(psmsOfSeqAndRun);
-						final Map<QuantificationLabel, Double> intensities = DataUtil
-								.getIntensitiesToPrint(psmsOfSeqAndRun, psmSelection, useRawIntensity);
-						final QuantifiedPSMInterface firstPSM = psmsOfSeqAndRun.get(0); // all have the same sequence
-																						// and
-																						// charge so we can get just one
-						final List<PTMInProtein> ptMsInProtein = firstPSM.getPTMsInProtein(UPLR.getInstance(),
-								ProteinSequences.getInstance());
-						String proteinSiteKey = null;
-						List<QuantifiedProteinInterface> primaryProteins = null;
-						if (simplifyProteinGroups) {
-							primaryProteins = DataUtil.getPrimaryProteins(DataUtil.getGroups(firstPSM));
+					String techRepMixture = null;
+					Mixture mixture = null;
+					for (final String individualRun : runs) {
+						final String techRepMixtureTMP = experimentalDesign.getTechRepMixtureByRun(individualRun);
+						if (techRepMixture == null) {
+							techRepMixture = techRepMixtureTMP;
+						} else {
+							if (!techRepMixture.equals(techRepMixtureTMP)) {
+								throw new IllegalArgumentException(
+										"Something is not consistent here: all these runs(fractions) '"
+												+ StringUtils.getSortedSeparatedValueStringFromChars(runs, ",")
+												+ "' should map to a single techRepMixture and we found (at least) two different ones: '"
+												+ techRepMixture + "', '" + techRepMixtureTMP + "'");
+							}
 						}
-						final List<String> proteinSiteKeys = DataUtil.getProteinSiteKeys(ptMsInProtein, false,
-								primaryProteins);
-						proteinSiteKey = StringUtils.getSortedSeparatedValueStringFromChars(proteinSiteKeys,
-								DataUtil.SEPARATOR);
-
-						proteinSites.add(proteinSiteKey);
-						final String peptideSequence = firstPSM.getFullSequence();
-						final String psm = peptideSequence + "_" + charge;
-
-						for (final QuantificationLabel label : intensities.keySet().stream().sorted()
-								.collect(Collectors.toList())) {
-							numIntensities++;
-							printMSstatsTMTOutputLine(fw, label, intensities.get(label), proteinSiteKey, charge,
-									peptideSequence, psm, fileName, run, experimentalDesign);
+						final Mixture mixtureTMP = experimentalDesign.getMixtureByRun(individualRun);
+						if (mixture == null) {
+							mixture = mixtureTMP;
+						} else {
+							if (!mixture.getName().equals(mixtureTMP.getName())) {
+								throw new IllegalArgumentException(
+										"Something is not consistent here: all these runs(fractions) '"
+												+ StringUtils.getSortedSeparatedValueStringFromChars(runs, ",")
+												+ "' should map to a single Mixture and we found (at least) two different ones: '"
+												+ mixture.getName() + "', '" + mixtureTMP.getName() + "'");
+							}
 						}
 					}
+
+					final int charge = DataUtil.getChargeToPrint(psmsOfSeqAndFileName);
+					final Map<QuantificationLabel, Double> intensities = DataUtil
+							.getIntensitiesToPrint(psmsOfSeqAndFileName, psmSelection, useRawIntensity);
+					final QuantifiedPSMInterface firstPSM = psmsOfSeqAndFileName.iterator().next(); // all have the same
+																									// sequence
+					// and
+					// charge so we can get just one
+					final List<PTMInProtein> ptMsInProtein = firstPSM.getPTMsInProtein(UPLR.getInstance(),
+							ProteinSequences.getInstance());
+					String proteinSiteKey = null;
+					List<QuantifiedProteinInterface> primaryProteins = null;
+					if (simplifyProteinGroups) {
+						primaryProteins = DataUtil.getPrimaryProteins(DataUtil.getGroups(firstPSM));
+					}
+					final List<String> proteinSiteKeys = DataUtil.getProteinSiteKeys(ptMsInProtein, false,
+							primaryProteins);
+					proteinSiteKey = StringUtils.getSortedSeparatedValueStringFromChars(proteinSiteKeys,
+							DataUtil.SEPARATOR);
+
+					proteinSites.add(proteinSiteKey);
+					final String peptideSequence = firstPSM.getFullSequence();
+					final String psm = peptideSequence + "_" + charge;
+
+					for (final QuantificationLabel label : intensities.keySet().stream().sorted()
+							.collect(Collectors.toList())) {
+						numIntensities++;
+						printMSstatsTMTOutputLine(fw, label, intensities.get(label), proteinSiteKey, charge,
+								peptideSequence, psm, fileName, techRepMixture, mixture, experimentalDesign);
+					}
+
 				}
 			}
 
@@ -573,7 +603,7 @@ public class FilesManager implements Clearable {
 		final Set<String> validProteins = new THashSet<String>();
 		try {
 			fw = new FileWriter(outputFile);
-			System.out.println("Output file: " + outputFile.getAbsolutePath());
+			System.out.println("Printing MSstatsTMT input file: " + outputFile.getAbsolutePath());
 			// header
 			fw.write(
 					"ProteinName\tPeptideSequence\tCharge\tPSM\tMixture\tTechRepMixture\tRun\tChannel\tCondition\tBioReplicate\tIntensity\n");
@@ -620,24 +650,56 @@ public class FilesManager implements Clearable {
 				for (final String fileName : fileNames) {
 					final List<QuantifiedPSMInterface> psmsOfSeqAndFileName = psmsOfSeq.stream()
 							.filter(psm -> psm.getFileNames().contains(fileName)).collect(Collectors.toList());
+					// here we have psms that have the same sequence+charge, that are from the same
+					// file (sema TMT run) but from different fractions.
+					// we want now to aggregate these values according to the aggregation method
+					// chosen by the user
+					// TODO
 					final Set<String> runs = psmsOfSeqAndFileName.stream().map(psm -> psm.getMSRun().getRunId())
 							.collect(Collectors.toSet());
-					for (final String run : runs) {
-						final List<QuantifiedPSMInterface> psmsOfSeqAndRun = psmsOfSeqAndFileName.stream()
-								.filter(psm -> psm.getMSRun().getRunId().equals(run)).collect(Collectors.toList());
-						final Map<QuantificationLabel, Double> intensities = DataUtil
-								.getIntensitiesToPrint(psmsOfSeqAndRun, psmSelection, useRawIntensity);
-						final QuantifiedPSMInterface firstPSM = psmsOfSeqAndRun.get(0);
-						final String peptideSequence = firstPSM.getFullSequence();
-						final String psm = peptideSequence + "_" + charge;
+					String techRepMixture = null;
+					Mixture mixture = null;
+					for (final String individualRun : runs) {
 
-						for (final QuantificationLabel label : intensities.keySet().stream().sorted()
-								.collect(Collectors.toList())) {
-							numIntensities++;
-							printMSstatsTMTOutputLine(fw, label, intensities.get(label), acc, charge, peptideSequence,
-									psm, fileName, run, experimentalDesign);
+						final String techRepMixtureTMP = experimentalDesign.getTechRepMixtureByRun(individualRun);
+						if (techRepMixture == null) {
+							techRepMixture = techRepMixtureTMP;
+						} else {
+							if (!techRepMixture.equals(techRepMixtureTMP)) {
+								throw new IllegalArgumentException(
+										"Something is not consistent here: all these runs(fractions) '"
+												+ StringUtils.getSortedSeparatedValueStringFromChars(runs, ",")
+												+ "' should map to a single techRepMixture and we found (at least) two different ones: '"
+												+ techRepMixture + "', '" + techRepMixtureTMP + "'");
+							}
+						}
+						final Mixture mixtureTMP = experimentalDesign.getMixtureByRun(individualRun);
+						if (mixture == null) {
+							mixture = mixtureTMP;
+						} else {
+							if (!mixture.getName().equals(mixtureTMP.getName())) {
+								throw new IllegalArgumentException(
+										"Something is not consistent here: all these runs(fractions) '"
+												+ StringUtils.getSortedSeparatedValueStringFromChars(runs, ",")
+												+ "' should map to a single Mixture and we found (at least) two different ones: '"
+												+ mixture.getName() + "', '" + mixtureTMP.getName() + "'");
+							}
 						}
 					}
+
+					final Map<QuantificationLabel, Double> intensities = DataUtil
+							.getIntensitiesToPrint(psmsOfSeqAndFileName, psmSelection, useRawIntensity);
+					final QuantifiedPSMInterface firstPSM = psmsOfSeqAndFileName.get(0);
+					final String peptideSequence = firstPSM.getFullSequence();
+					final String psm = peptideSequence + "_" + charge;
+
+					for (final QuantificationLabel label : intensities.keySet().stream().sorted()
+							.collect(Collectors.toList())) {
+						numIntensities++;
+						printMSstatsTMTOutputLine(fw, label, intensities.get(label), acc, charge, peptideSequence, psm,
+								fileName, techRepMixture, mixture, experimentalDesign);
+					}
+
 				}
 			}
 
@@ -653,9 +715,9 @@ public class FilesManager implements Clearable {
 	}
 
 	private void printMSstatsTMTOutputLine(FileWriter fw, QuantificationLabel label, double intensity, String acc,
-			int charge, String peptideSequence, String psm, String runColumnString, String individualRun,
-			ExperimentalDesign experimentalDesign) throws IOException {
-		final Mixture mixture = experimentalDesign.getMixtureByRun(individualRun);
+			int charge, String peptideSequence, String psm, String runColumnString, String techRepMixture,
+			Mixture mixture, ExperimentalDesign experimentalDesign) throws IOException {
+
 		final Float channel = mixture.getChannelByLabel(label);
 		if (channel == null) {
 			// this may be because that channel was not used and was not included in the
@@ -668,7 +730,7 @@ public class FilesManager implements Clearable {
 		if (condition != null) { // it can be null of the label from the peptide is not used in the analysis
 			conditionName = condition.getName();
 		}
-		final String techRepMixture = experimentalDesign.getTechRepMixtureByRun(individualRun);
+
 		String bioReplicate = null;
 		String channelString = null;
 		if (channel != null) { // it can be null of the label from the peptide is not used in the analysis
