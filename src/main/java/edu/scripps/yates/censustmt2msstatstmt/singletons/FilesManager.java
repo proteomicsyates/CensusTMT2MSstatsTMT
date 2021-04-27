@@ -540,7 +540,7 @@ public class FilesManager implements Clearable {
 
 					final int charge = DataUtil.getChargeToPrint(psmsOfSeqAndFileName);
 					final Map<QuantificationLabel, Double> intensities = DataUtil
-							.getIntensitiesToPrint(psmsOfSeqAndFileName, psmSelection, useRawIntensity);
+							.getAggregatedIntensities(psmsOfSeqAndFileName, psmSelection, useRawIntensity);
 					final QuantifiedPSMInterface firstPSM = psmsOfSeqAndFileName.iterator().next(); // all have the same
 																									// sequence
 					// and
@@ -651,55 +651,70 @@ public class FilesManager implements Clearable {
 					final List<QuantifiedPSMInterface> psmsOfSeqAndFileName = psmsOfSeq.stream()
 							.filter(psm -> psm.getFileNames().contains(fileName)).collect(Collectors.toList());
 					// here we have psms that have the same sequence+charge, that are from the same
-					// file (sema TMT run) but from different fractions.
+					// file (same TMT run) but from different fractions.
 					// we want now to aggregate these values according to the aggregation method
 					// chosen by the user
 					// TODO
-					final Set<String> runs = psmsOfSeqAndFileName.stream().map(psm -> psm.getMSRun().getRunId())
-							.collect(Collectors.toSet());
-					String techRepMixture = null;
-					Mixture mixture = null;
-					for (final String individualRun : runs) {
+//					final Set<String> runs = psmsOfSeqAndFileName.stream().map(psm -> psm.getMSRun().getRunId())
+//							.collect(Collectors.toSet());
 
+					final Map<String, List<QuantifiedPSMInterface>> psmsByTechnicalReplicateMixture = new THashMap<String, List<QuantifiedPSMInterface>>();
+					for (final QuantifiedPSMInterface psm : psmsOfSeqAndFileName) {
+						final String individualRun = psm.getMSRun().getRunId();
 						final String techRepMixtureTMP = experimentalDesign.getTechRepMixtureByRun(individualRun);
-						if (techRepMixture == null) {
-							techRepMixture = techRepMixtureTMP;
-						} else {
-							if (!techRepMixture.equals(techRepMixtureTMP)) {
-								throw new IllegalArgumentException(
-										"Something is not consistent here: all these runs(fractions) '"
-												+ StringUtils.getSortedSeparatedValueStringFromChars(runs, ",")
-												+ "' should map to a single techRepMixture and we found (at least) two different ones: '"
-												+ techRepMixture + "', '" + techRepMixtureTMP + "'");
-							}
+						if (!psmsByTechnicalReplicateMixture.containsKey(techRepMixtureTMP)) {
+							psmsByTechnicalReplicateMixture.put(techRepMixtureTMP,
+									new ArrayList<QuantifiedPSMInterface>());
 						}
-						final Mixture mixtureTMP = experimentalDesign.getMixtureByRun(individualRun);
-						if (mixture == null) {
-							mixture = mixtureTMP;
-						} else {
-							if (!mixture.getName().equals(mixtureTMP.getName())) {
-								throw new IllegalArgumentException(
-										"Something is not consistent here: all these runs(fractions) '"
-												+ StringUtils.getSortedSeparatedValueStringFromChars(runs, ",")
-												+ "' should map to a single Mixture and we found (at least) two different ones: '"
-												+ mixture.getName() + "', '" + mixtureTMP.getName() + "'");
-							}
-						}
+						psmsByTechnicalReplicateMixture.get(techRepMixtureTMP).add(psm);
 					}
 
-					final Map<QuantificationLabel, Double> intensities = DataUtil
-							.getIntensitiesToPrint(psmsOfSeqAndFileName, psmSelection, useRawIntensity);
-					final QuantifiedPSMInterface firstPSM = psmsOfSeqAndFileName.get(0);
-					final String peptideSequence = firstPSM.getFullSequence();
-					final String psm = peptideSequence + "_" + charge;
+//					for (final String individualRun : runs) {
+//
+//						final String techRepMixtureTMP = experimentalDesign.getTechRepMixtureByRun(individualRun);
+//						if (techRepMixture == null) {
+//							techRepMixture = techRepMixtureTMP;
+//						} else {
+//							if (!techRepMixture.equals(techRepMixtureTMP)) {
+//								throw new IllegalArgumentException(
+//										"Something is not consistent here: all these runs(fractions) '"
+//												+ StringUtils.getSortedSeparatedValueStringFromChars(runs, ",")
+//												+ "' should map to a single techRepMixture and we found (at least) two different ones: '"
+//												+ techRepMixture + "', '" + techRepMixtureTMP + "'");
+//							}
+//						}
+//						final Mixture mixtureTMP = experimentalDesign.getMixtureByRun(individualRun);
+//						if (mixture == null) {
+//							mixture = mixtureTMP;
+//						} else {
+//							if (!mixture.getName().equals(mixtureTMP.getName())) {
+//								throw new IllegalArgumentException(
+//										"Something is not consistent here: all these runs(fractions) '"
+//												+ StringUtils.getSortedSeparatedValueStringFromChars(runs, ",")
+//												+ "' should map to a single Mixture and we found (at least) two different ones: '"
+//												+ mixture.getName() + "', '" + mixtureTMP.getName() + "'");
+//							}
+//						}
+//					}
+					for (final String techRepMixture : psmsByTechnicalReplicateMixture.keySet()) {
+						final Mixture mixture = experimentalDesign
+								.getMixtureByTechnicalReplicateMixture(techRepMixture);
 
-					for (final QuantificationLabel label : intensities.keySet().stream().sorted()
-							.collect(Collectors.toList())) {
-						numIntensities++;
-						printMSstatsTMTOutputLine(fw, label, intensities.get(label), acc, charge, peptideSequence, psm,
-								fileName, techRepMixture, mixture, experimentalDesign);
+						final List<QuantifiedPSMInterface> psmsToAggregate = psmsByTechnicalReplicateMixture
+								.get(techRepMixture);
+						final Map<QuantificationLabel, Double> intensities = DataUtil
+								.getAggregatedIntensities(psmsToAggregate, psmSelection, useRawIntensity);
+						final QuantifiedPSMInterface firstPSM = psmsOfSeqAndFileName.get(0);
+						final String peptideSequence = firstPSM.getFullSequence();
+						final String psm = peptideSequence + "_" + charge;
+
+						for (final QuantificationLabel label : intensities.keySet().stream().sorted()
+								.collect(Collectors.toList())) {
+							numIntensities++;
+							printMSstatsTMTOutputLine(fw, label, intensities.get(label), acc, charge, peptideSequence,
+									psm, fileName, techRepMixture, mixture, experimentalDesign);
+						}
 					}
-
 				}
 			}
 

@@ -417,7 +417,7 @@ public class DataUtil {
 		return charge;
 	}
 
-	public static Map<QuantificationLabel, Double> getIntensitiesToPrint(Collection<QuantifiedPSMInterface> psms,
+	public static Map<QuantificationLabel, Double> getAggregatedIntensities(Collection<QuantifiedPSMInterface> psms,
 			PSMAggregationType psmSelection, boolean useRawIntensity) throws IOException {
 
 		switch (psmSelection) {

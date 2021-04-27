@@ -31,6 +31,7 @@ public class ExperimentalDesign {
 	private final Map<String, String> bioReplicateByChannelTechRepMixtureAndMixture = new THashMap<String, String>();
 	private final Map<String, Set<String>> fractionsByRun = new THashMap<String, Set<String>>();
 	private int tmtPlex;
+	private final Map<String, Mixture> mixtureByTechnicalReplicateMixture = new THashMap<String, Mixture>();
 
 	public ExperimentalDesign(File experimentalDesignFile, String separator) throws IOException {
 		try {
@@ -74,6 +75,7 @@ public class ExperimentalDesign {
 				}
 				fractionsByRun.get(run).add(fraction);
 				techRepMixtureByRun.put(run, techRepMixture);
+				mixtureByTechnicalReplicateMixture.put(techRepMixture, mixture);
 				bioReplicateByChannelTechRepMixtureAndMixture.put(channel + techRepMixture + mixture.getName(),
 						bioReplicate);
 			}
@@ -125,6 +127,10 @@ public class ExperimentalDesign {
 		for (final Mixture mixture : getMixtures()) {
 			mixture.setTMTPlex(tmtPlex);
 		}
+	}
+
+	public Mixture getMixtureByTechnicalReplicateMixture(String techRepMixture) {
+		return mixtureByTechnicalReplicateMixture.get(techRepMixture);
 	}
 
 }
