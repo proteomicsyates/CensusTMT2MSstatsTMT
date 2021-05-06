@@ -23,7 +23,7 @@ public class ExperimentalDesign {
 	private static final String MIXTURE = "Mixture";
 	private static final String BIO_REPLICATE = "BioReplicate";
 //	static final String SYMBOL = "@@@@";
-	private final String separator;
+	private String separator;
 
 	private final Map<String, Mixture> mixtureByMixtureName = new THashMap<String, Mixture>();
 	private final Map<String, Mixture> mixtureByRun = new THashMap<String, Mixture>();
@@ -43,6 +43,14 @@ public class ExperimentalDesign {
 				final String line = lines.get(numLine).trim();
 				if ("".equals(line)) {
 					continue;
+				}
+				if (!line.contains(separator)) {
+					// maybe is not that one
+					if (separator.equals("\t")) {
+						separator = ",";
+					} else if (separator.equals(",")) {
+						separator = "\t";
+					}
 				}
 				final String[] split = line.split(separator);
 				final String run = split[indexByHeader.get(RUN)].trim();
@@ -90,6 +98,14 @@ public class ExperimentalDesign {
 
 	private TObjectIntMap<String> getIndexesByHeaders(String header) {
 		final TObjectIntMap<String> ret = new TObjectIntHashMap<String>();
+		if (!header.contains(separator)) {
+			// maybe is not that one
+			if (separator.equals("\t")) {
+				separator = ",";
+			} else if (separator.equals(",")) {
+				separator = "\t";
+			}
+		}
 		final String[] split = header.split(separator);
 		for (int index = 0; index < split.length; index++) {
 			ret.put(split[index], index);

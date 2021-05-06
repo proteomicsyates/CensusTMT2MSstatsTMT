@@ -331,6 +331,13 @@ public class DataUtil {
 	}
 
 	public static Set<ProteinGroup> getGroups(HasProteins o) {
+		final Set<ProteinGroup> evs = o.getProteins().stream().map(p -> p.getProteinGroup())
+				.collect(Collectors.toSet());
+		for (final ProteinGroup group : evs) {
+			if (group == null) {
+				System.out.println("asdf");
+			}
+		}
 		final Set<ProteinGroup> collect = o.getProteins().stream().map(p -> p.getProteinGroup())
 				.filter(g -> g.getEvidence() != ProteinEvidence.NONCONCLUSIVE).collect(Collectors.toSet());
 		return collect;

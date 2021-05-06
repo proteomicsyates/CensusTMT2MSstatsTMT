@@ -165,7 +165,8 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			final Collection<QuantifiedProteinInterface> proteins = parser.getProteinMap().values();
 
 			if (ed != null) {
-				// input data check: whether we find the runs in the input data
+				// input data check: whether we find all the input data runs from input files in
+				// the annotation file
 				final Set<String> runsInAnnotation = new THashSet<String>();
 
 				ed.getMixtures().forEach(mix -> runsInAnnotation.addAll(mix.getRuns()));
@@ -182,24 +183,14 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 						}
 					}
 				}
-				final Set<String> runsInAnnotationNotInInputData = new THashSet<String>();
-				for (final String run : runsInAnnotation) {
-					if (!runsInBoth.contains(run)) {
-						runsInAnnotationNotInInputData.add(run);
-					}
-				}
-				if (!runsInAnnotationNotInInputData.isEmpty()) {
+
+				if (!runsFromInputDataNotInAnnotation.isEmpty()) {
 					final String runsString = StringUtils
-							.getSortedSeparatedValueStringFromChars(runsInAnnotationNotInInputData, ", ");
-					System.err.println(runsInAnnotation.size() + " Runs (" + runsString
-							+ ") that are present in the Annotation file ('"
-							+ FilenameUtils.getName(experimentalDesignFile.getAbsolutePath())
-							+ "') are not found in the input data file!");
-					System.err.println(
-							"Check your input data file and make sure that all runs in the annotation file are present. Here are the runs from the input data that are not present in the input data: "
-									+ StringUtils.getSortedSeparatedValueStringFromChars(
-											runsFromInputDataNotInAnnotation, ", "));
-					throw new IllegalArgumentException("Invalid annotation file: runs not found: " + runsString);
+							.getSortedSeparatedValueStringFromChars(runsFromInputDataNotInAnnotation, ", ");
+					System.err.println("Warning: " + runsFromInputDataNotInAnnotation.size() + " runs (" + runsString
+							+ ") that are present in the input files are not found in the annotation file ('"
+							+ FilenameUtils.getName(experimentalDesignFile.getAbsolutePath()) + "')");
+					// we just warn the user. He may not want to use all the runs in input file
 				}
 			}
 			GeneMapper.getInstance().mapGenesFromProteinDescriptionsInInputFile(proteins);
@@ -450,7 +441,8 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 			ExperimentalDesign experimentalDesign) throws IOException, WrongTMTLabels {
 		final Map<QuantificationLabel, QuantCondition>[] ret = new Map[inputFiles2.size()];
 		if (experimentalDesign != null) {
-
+			// runs from annotation file that are not found in input file
+			final Set<String> runsNotFoundInInputFiles = new THashSet<String>();
 			int fileIndex = 0;
 			for (final File inputFile : inputFiles2) {
 
@@ -467,28 +459,31 @@ public class CensusTMT2MSstatsTMT extends CommandLineProgramGuiEnclosable {
 					final Set<String> runs = parser.getPSMMap().values().stream().map(psm -> psm.getMSRun().getRunId())
 							.collect(Collectors.toSet());
 					for (final Mixture mixture : experimentalDesign.getMixtures()) {
-						final Set<String> runsInMixture = mixture.getRuns();
-						boolean valid = true;
-						for (final String runInMixture : runsInMixture) {
-							if (!runs.contains(runInMixture)) {
-								valid = false;
-								break;
+						final Set<String> runsInMixtureAnnotationFile = mixture.getRuns();
+						boolean valid = false;// at least one run in the annotation file is found in the input file
+						for (final String runInMixtureAnnotationFile : runsInMixtureAnnotationFile) {
+							if (!runs.contains(runInMixtureAnnotationFile)) {
+								runsNotFoundInInputFiles.add(runInMixtureAnnotationFile);
+							} else {
+								valid = true;
+								runsNotFoundInInputFiles.remove(runInMixtureAnnotationFile);
 							}
 						}
 						if (valid) {
 							ret[fileIndex] = mixture.getConditionsByLabels();
 						}
 					}
-					if (ret[fileIndex] == null) {
-						throw new IllegalArgumentException("Runs in input file '" + inputFile.getAbsolutePath() + "' ("
-								+ StringUtils.getSeparatedValueStringFromChars(runs.toArray(), ",")
-								+ ") are not found in the annotation file.");
-					}
+
 				} catch (final FileNotFoundException e) {
 				} catch (final QuantParserException e) {
 				} finally {
 					fileIndex++;
 				}
+			}
+			if (!runsNotFoundInInputFiles.isEmpty()) {
+				System.err.println("Warning: Some runs in annotation file ("
+						+ StringUtils.getSeparatedValueStringFromChars(runsNotFoundInInputFiles.toArray(), ",")
+						+ ") are not found in any of the input files.");
 			}
 		} else {
 
