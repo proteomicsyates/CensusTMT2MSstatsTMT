@@ -711,8 +711,11 @@ public class FilesManager implements Clearable {
 						for (final QuantificationLabel label : intensities.keySet().stream().sorted()
 								.collect(Collectors.toList())) {
 							numIntensities++;
+							String runName = fileName;// change from email from Nam on May 6 because having replicates,
+														// multiple runs, it can cause error in MSstatsTMT
+							runName = techRepMixture + "_" + mixture;
 							printMSstatsTMTOutputLine(fw, label, intensities.get(label), acc, charge, peptideSequence,
-									psm, fileName, techRepMixture, mixture, experimentalDesign);
+									psm, runName, techRepMixture, mixture, experimentalDesign);
 						}
 					}
 				}
