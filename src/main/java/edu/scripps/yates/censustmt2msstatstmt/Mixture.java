@@ -60,6 +60,7 @@ public class Mixture {
 		sortedChannels.addAll(this.getChannels());
 		sortedChannels.sort();
 		//
+
 		final List<QuantificationLabel> tmtPlexLabels = QuantificationLabel.getTMTPlexLabels(this.tmtPlex);
 		for (int i = 0; i < tmtPlexLabels.size(); i++) {
 
