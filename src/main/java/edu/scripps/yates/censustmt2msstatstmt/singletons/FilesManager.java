@@ -713,7 +713,7 @@ public class FilesManager implements Clearable {
 							numIntensities++;
 							String runName = fileName;// change from email from Nam on May 6 because having replicates,
 														// multiple runs, it can cause error in MSstatsTMT
-							runName = techRepMixture + "_" + mixture;
+							runName = techRepMixture + "_" + mixture.getName();
 							printMSstatsTMTOutputLine(fw, label, intensities.get(label), acc, charge, peptideSequence,
 									psm, runName, techRepMixture, mixture, experimentalDesign);
 						}
